@@ -1,21 +1,18 @@
-<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;net461</TargetFrameworks>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-  </PropertyGroup>
-  <PropertyGroup>
-    <Title>FNBitcoin</Title>
-    <Description>FNBitcoin does the thing!</Description>
-
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <Optimize>true</Optimize>
     <Tailcalls>true</Tailcalls>
-    
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="MiniScriptParserTmp.fs" />
+    <Compile Include="MiniscriptAST.fs" />
+    <Compile Include="MiniScriptParser.fs" />
+    <Compile Include="Satoshi.fs" />
+    <Compile Include="Contract.fs" />
     <Compile Include="Library.fs" />
   </ItemGroup>
   <Import Project="..\..\fsc.props" />

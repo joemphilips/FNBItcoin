@@ -1,4 +1,6 @@
 Expecto
+Expecto.FsCheck
+FsCheck
 FSharp.Core
 dotnet-mono
 Microsoft.NET.Test.Sdk
