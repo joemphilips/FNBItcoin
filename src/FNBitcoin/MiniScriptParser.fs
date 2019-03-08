@@ -1,6 +1,5 @@
 module FNBitcoin.MiniScriptParser
 
-// TODO: do not use external dependency
 open NBitcoin
 open System.Text.RegularExpressions
 open System
@@ -39,6 +38,7 @@ type Policy<'T> with
 // parser
 let quoted = Regex(@"\((.*)\)")
 
+// TODO: this has bug in case of nested expression. Fix.
 let rec (|SurroundedByBrackets|_|) (s: string) =
     let s2  = s.TrimStart()
     let matchC = quoted.Matches(s2)
@@ -102,7 +102,7 @@ let rec (|Policy|_|) s =
     | Expression "multi" (SurroundedByBrackets (PubKeysPattern pks)) -> Multi((fst pks), (snd pks)) |> Some
     | Expression "hash" (SurroundedByBrackets (Hash hash)) -> Some(Hash hash)
     | Expression "time" (SurroundedByBrackets (Time t)) -> Some(Time(t))
-    // ここから再帰
+    // recursive matches
     | Expression "thres" (SurroundedByBrackets (Threshold thres)) -> Some(Threshold(thres))
     | Expression "and" (SurroundedByBrackets (And (expr1, expr2))) -> And(expr1, expr2) |> Some
     | Expression "or" (SurroundedByBrackets (Or (expr1, expr2))) -> Or(expr1, expr2) |> Some
