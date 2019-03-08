@@ -22,5 +22,8 @@ let tests =
             | _ -> failwith "Failed to parse policy"
 
         testCase "ParseTest2" <| fun _ ->
-            let data =  "thres(2, pk())"
+            let data =  "thres(2, and(pk(0225629523a16986d3bf575e1163f7dff024d734ad1e656b55ba94e41ede2fdfb6), aor(multi(1, 0225629523a16986d3bf575e1163f7dff024d734ad1e656b55ba94e41ede2fdfb6, 0225629523a16986d3bf575e1163f7dff024d734ad1e656b55ba94e41ede2fdfb6), time(1000))))"
+            match data with
+            | Policy p -> printfn "%A" p
+            | _ -> failwith "Failed to parse policy"
     ]

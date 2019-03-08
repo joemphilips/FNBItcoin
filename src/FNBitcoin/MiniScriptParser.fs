@@ -95,6 +95,7 @@ let (|Time|_|) (s: string[]) =
     else
         Some(uint32(s.[0]))
 
+
 let rec (|Policy|_|) s =
     match s with
     | Expression "pk" (SurroundedByBrackets (PubKeyPattern pk)) -> Some (Key pk)
@@ -103,9 +104,9 @@ let rec (|Policy|_|) s =
     | Expression "time" (SurroundedByBrackets (Time t)) -> Some(Time(t))
     // ここから再帰
     | Expression "thres" (SurroundedByBrackets (Threshold thres)) -> Some(Threshold(thres))
-    | Expression "and" (SurroundedByBrackets (PubKeysPattern pks)) -> Multi((fst pks), (snd pks)) |> Some
-    | Expression "or" (SurroundedByBrackets (PubKeysPattern pks)) -> Multi((fst pks), (snd pks)) |> Some
-    | Expression "aor" (SurroundedByBrackets (PubKeysPattern pks)) -> Multi((fst pks), (snd pks)) |> Some
+    | Expression "and" (SurroundedByBrackets (And (expr1, expr2))) -> And(expr1, expr2) |> Some
+    | Expression "or" (SurroundedByBrackets (Or (expr1, expr2))) -> Or(expr1, expr2) |> Some
+    | Expression "aor" (SurroundedByBrackets (AsymmetricOr (expr1, expr2))) -> AsymmetricOr(expr1, expr2) |> Some
     | _ -> None
 and (|Threshold|_|) (s: string[]) =
     if s.Length < 2 then
@@ -120,3 +121,15 @@ and (|Threshold|_|) (s: string[]) =
             else
                 Some (threshold, subPolicy)
         | (false, _) -> None
+and (|And|_|) (s: string[]) = twoSubExpressions s
+and (|Or|_|) (s: string[]) = twoSubExpressions s
+and (|AsymmetricOr|_|) (s: string[]) = twoSubExpressions s
+and twoSubExpressions (s: string[]) =
+    if s.Length <> 2 then
+        None
+    else
+        let subPolicies = s |> Array.choose((|Policy|_|))
+        if subPolicies.Length <> s.Length then
+            None
+        else
+            Some (subPolicies.[0], subPolicies.[1])
