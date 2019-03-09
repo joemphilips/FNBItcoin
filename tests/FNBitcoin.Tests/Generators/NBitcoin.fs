@@ -6,7 +6,8 @@ module internal NBitcoin =
     open FNBitcoin.Tests.Generators.Primitives
 
     let pubKeyGen =
-        Gen.constant(Key()) |> Gen.map(fun k -> k.PubKey)
+        let k = Key() // prioritize speed for randomness
+        Gen.constant(k) |> Gen.map(fun k -> k.PubKey)
 
     let uint256Gen =
         bytesOfNGen 32 |> Gen.map uint256

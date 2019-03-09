@@ -3,6 +3,7 @@ module MiniScriptParserTests
 open FNBitcoin.MiniScriptParser
 open Expecto
 open Expecto.Logging
+open Expecto.Logging.Message
 open FNBitcoin.Tests.Generators
 let logger = Log.create "MiniscriptParser"
 
@@ -16,7 +17,15 @@ let check = function
 
 
 let config = {
-            FsCheckConfig.defaultConfig with arbitrary = [typeof<Generators>]
+            FsCheckConfig.defaultConfig with
+                arbitrary = [typeof<Generators>]
+                maxTest = 5
+                receivedArgs = fun _ name no args ->
+                  logger.debugWithBP (
+                    eventX "For {test} {no}, generated {args}"
+                    >> setField "test" name
+                    >> setField "no" no
+                    >> setField "args" args)
         }
 
 [<Tests>]
@@ -44,7 +53,7 @@ let tests =
             let d5 = sprintf "thres(2,%s,%s,%s)" d1 d2 d3
             check d5
 
-            let d6 = sprintf "and(%s, %s)" d4 d5
+            let d6 = sprintf "and(%s,%s)" d2 d3
             check d6
 
             let d7 = sprintf "or(%s, %s)" d4 d5
@@ -54,16 +63,16 @@ let tests =
             check d8
 
 
-        ptestCase "parsing input with noise" <| fun _ ->
-            let dataWithWhiteSpace =  sprintf "thres ( 2 , and (pk ( %s ) , aor( multi ( %s , %s ) , time  (  1000)) ))"
-                                        pk1Str pk1Str pk1Str
+        testCase "parsing input with noise" <| fun _ ->
+            let dataWithWhiteSpace =  sprintf "thres ( 2 , and (pk ( %s ) , aor( multi (2,  %s , %s ) , time  (  1000)) ), pk(%s))"
+                                        pk1Str pk1Str pk1Str pk2Str
             check dataWithWhiteSpace
-            let dataWithNewLine =  sprintf "thres ( \r\n2 , and \n(pk ( \n%s ) , aor( multi \n( %s ,%s )\n, time  (  1000)) ))"
-                                      pk1Str pk1Str pk1Str
+            let dataWithNewLine =  sprintf "thres ( \r\n2 , and \n(pk ( \n%s ) , aor( multi \n(2, %s ,%s )\n, time  (  1000)) ), pk(%s))"
+                                      pk1Str pk1Str pk1Str pk2Str
             check dataWithNewLine
 
-        ptestCase "symmetrical conversion" <| fun _ ->
-            let data =  sprintf "thres(2,and(pk(%s),aor(multi(2,%s,%s),time(1000))), pk(%s))" pk1Str pk1Str pk1Str pk2Str
+        testCase "symmetrical conversion" <| fun _ ->
+            let data =  sprintf "thres(2,and(pk(%s),aor(multi(2,%s,%s),time(1000))),pk(%s))" pk1Str pk1Str pk1Str pk2Str
             let data2 =  match data with
                          | Policy p -> printPolicy p
                          | _ -> failwith "Failed to parse policy"

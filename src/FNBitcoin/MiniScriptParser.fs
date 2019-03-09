@@ -40,63 +40,71 @@ let quoted = Regex(@"\((.*)\)")
 
 // TODO: this has bug in case of nested expression. Fix.
 let rec (|SurroundedByBrackets|_|) (s: string) =
-    let s2  = s.TrimStart()
-    let matchC = quoted.Matches(s2)
-    if matchC.Count = 0 then
-        None
+    let s2  = s.Trim()
+    if s2.StartsWith("(") && s2.EndsWith(")") then
+        Some (s2.TrimStart('(').TrimEnd(')'))
     else
-        let last = matchC.Count
-        let lastMatch = matchC.[last - 1]
-        printfn "Debug: last match was %O"  lastMatch
-        let contentStr = lastMatch.Value.TrimStart('(', ' ').TrimEnd(')', ' ')
-        let contents = contentStr.Split(',')
-        Some (contents)
+        None
 
 let (|Expression|_|) (prefix: string) (s: string) =
-    let s = s.TrimStart()
+    let s = s.Trim()
     if s.StartsWith(prefix) then
          Some (s.Substring(prefix.Length))
     else
         None
 
-let (|PubKeyPattern|_|) (s: string[]) =
-    if 1 < s.Length then
-        None
-    else
-        let s = s.[0]
+let (|PubKeyPattern|_|) (s: string) =
+    try
+        Some(PubKey(s))
+    with
+        | :? FormatException as ex ->  None
+
+let (|PubKeysPattern|_|) (s: string) =
+    let s = s.Trim().Split(',')
+    match UInt32.TryParse(s.[0]) with
+    | (false, _) -> None
+    | (true, i) ->
         try
-            Some(PubKey(s))
+            let pks = s.[1..s.Length - 1] |> Array.map(fun hex -> PubKey(hex.Trim()))
+            Some (i, pks)
         with
-            | :? FormatException as ex ->  None
+        | :?FormatException -> None
 
-let (|PubKeysPattern|_|) (s: string[]) =
-    if s.Length < 2 then
-        None
+let (|Hash|_|) (s: string) =
+    try
+        Some(uint256(s.Trim()))
+    with
+    | :? FormatException -> None
+
+let (|Time|_|) (s: string) =
+    try
+        Some(uint32(s.Trim()))
+    with
+    | :? FormatException -> None
+
+let rec safeSplit (s:string) (acc: string list) (index: int) (openNum: int) (currentChunk: char[]) =
+    if s.Length = index then
+        let lastChunk = String.Concat(Array.append currentChunk [|')'|])
+        let lastAcc = List.append acc [lastChunk]
+        lastAcc |> List.toArray
     else
-        let m = s.[0]
-        match UInt32.TryParse(m) with
-        | (false, _) -> None
-        | (true, i) ->
-            try
-                let pks = s.[1..s.Length] |> Array.map(fun hex -> PubKey(hex))
-                Some (i, pks)
-            with
-            | :?FormatException -> None
-
-let (|Hash|_|) (s: string[]) =
-    if 1 < s.Length then
-        None
-    else
-        Some(uint256(s.[0]))
-
-let (|Time|_|) (s: string[]) =
-    if 1 < s.Length then
-        None
-    else
-        Some(uint32(s.[0]))
-
+        let c = s.[index]
+        if c = '(' then
+            let newChunk = Array.append currentChunk [|c|]
+            safeSplit s acc (index + 1) (openNum + 1) newChunk
+        elif c = ')' then
+            let newChunk = Array.append currentChunk [|c|]
+            safeSplit s acc (index + 1) (openNum - 1) newChunk
+        elif openNum = 0 && (c = ',') then
+            let newElement = String.Concat(currentChunk)
+            let newAcc = List.append acc [newElement]
+            safeSplit s newAcc (index + 1) (openNum) [||]
+        else
+            let newChunk = Array.append currentChunk [|c|]
+            safeSplit s acc (index + 1) (openNum) newChunk
 
 let rec (|Policy|_|) s =
+    let s = Regex.Replace(s, @"[|\s|\n|\r\n]+", "")
     match s with
     | Expression "pk" (SurroundedByBrackets (PubKeyPattern pk)) -> Some (Key pk)
     | Expression "multi" (SurroundedByBrackets (PubKeysPattern pks)) -> Multi((fst pks), (snd pks)) |> Some
@@ -108,23 +116,22 @@ let rec (|Policy|_|) s =
     | Expression "or" (SurroundedByBrackets (Or (expr1, expr2))) -> Or(expr1, expr2) |> Some
     | Expression "aor" (SurroundedByBrackets (AsymmetricOr (expr1, expr2))) -> AsymmetricOr(expr1, expr2) |> Some
     | _ -> None
-and (|Threshold|_|) (s: string[]) =
-    if s.Length < 2 then
-        None
-    else
-        let thresholdStr = s.[0]
-        match UInt32.TryParse(thresholdStr) with
-        | (true, threshold) ->
-            let subPolicy = s.[1..s.Length] |> Array.choose((|Policy|_|))
-            if subPolicy.Length <> s.Length then
-                None
-            else
-                Some (threshold, subPolicy)
-        | (false, _) -> None
-and (|And|_|) (s: string[]) = twoSubExpressions s
-and (|Or|_|) (s: string[]) = twoSubExpressions s
-and (|AsymmetricOr|_|) (s: string[]) = twoSubExpressions s
-and twoSubExpressions (s: string[]) =
+and (|Threshold|_|) (s: string) =
+    let s = safeSplit s [] 0 0 [||]
+    let thresholdStr = s.[0]
+    match UInt32.TryParse(thresholdStr) with
+    | (true, threshold) ->
+        let subPolicy = s.[1..s.Length - 1] |> Array.choose((|Policy|_|))
+        if subPolicy.Length <> s.Length - 1 then
+            None
+        else
+            Some (threshold, subPolicy)
+    | (false, _) -> None
+and (|And|_|) (s: string) = twoSubExpressions s
+and (|Or|_|) (s: string) = twoSubExpressions s
+and (|AsymmetricOr|_|) (s: string) = twoSubExpressions s
+and twoSubExpressions (s: string) =
+    let s = safeSplit s [] 0 0 [||]
     if s.Length <> 2 then
         None
     else
