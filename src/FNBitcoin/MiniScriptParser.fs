@@ -4,15 +4,15 @@ open NBitcoin
 open System.Text.RegularExpressions
 open System
 
-type Policy<'P> =
+type Policy =
     | Key of PubKey
     | Multi of uint32 * PubKey[]
     | Hash of uint256
     | Time of uint32
-    | Threshold of uint32 * Policy<'P>[]
-    | And of Policy<'P> * Policy<'P>
-    | Or of Policy<'P> * Policy<'P>
-    | AsymmetricOr of Policy<'P> * Policy<'P>
+    | Threshold of uint32 * Policy[]
+    | And of Policy * Policy
+    | Or of Policy * Policy
+    | AsymmetricOr of Policy * Policy
 
 // printer
 let rec printPolicy p =
@@ -32,7 +32,7 @@ let rec printPolicy p =
     | Or (p1, p2) ->  sprintf "or(%s,%s)" (printPolicy p1) (printPolicy p2)
     | AsymmetricOr (p1, p2) ->  sprintf "aor(%s,%s)" (printPolicy p1) (printPolicy p2)
 
-type Policy<'T> with
+type Policy with
     member this.print() = printPolicy this
 
 // parser
@@ -42,15 +42,15 @@ let quoted = Regex(@"\((.*)\)")
 let rec (|SurroundedByBrackets|_|) (s: string) =
     let s2  = s.TrimStart()
     let matchC = quoted.Matches(s2)
-    if matchC.Count <> 0 then
+    if matchC.Count = 0 then
+        None
+    else
         let last = matchC.Count
         let lastMatch = matchC.[last - 1]
         printfn "Debug: last match was %O"  lastMatch
         let contentStr = lastMatch.Value.TrimStart('(', ' ').TrimEnd(')', ' ')
         let contents = contentStr.Split(',')
         Some (contents)
-    else
-        None
 
 let (|Expression|_|) (prefix: string) (s: string) =
     let s = s.TrimStart()
