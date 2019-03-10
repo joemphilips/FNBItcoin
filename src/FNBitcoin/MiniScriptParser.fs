@@ -38,7 +38,6 @@ type Policy with
 // parser
 let quoted = Regex(@"\((.*)\)")
 
-// TODO: this has bug in case of nested expression. Fix.
 let rec (|SurroundedByBrackets|_|) (s: string) =
     let s2  = s.Trim()
     if s2.StartsWith("(") && s2.EndsWith(")") then
@@ -82,6 +81,7 @@ let (|Time|_|) (s: string) =
     with
     | :? FormatException -> None
 
+// Split with "," but only when not surroounded by parenthesis
 let rec safeSplit (s:string) (acc: string list) (index: int) (openNum: int) (currentChunk: char[]) =
     if s.Length = index then
         let lastChunk = String.Concat(Array.append currentChunk [|')'|])

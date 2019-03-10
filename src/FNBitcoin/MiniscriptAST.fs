@@ -1,4 +1,4 @@
-module internal MiniscriptAST
+module MiniscriptAST
 open NBitcoin
 
 type E =
@@ -57,10 +57,70 @@ and T =
     | CastE of E
 
 type AST =
-    | E
-    | Q
-    | W
-    | F
-    | V
-    | T
+    | ETree of E
+    | QTree of Q
+    | WTree of W
+    | FTree of F
+    | VTree of V
+    | TTree of T
 
+type AST with
+    member this.castT(): Result<T, string> =
+        match this with
+        | TTree t -> Ok t
+        | _ -> Error "failed to cast"
+
+    member this.castE(): Result<E, string> =
+        match this with
+        | ETree e -> Ok e
+        | _ -> Error "failed to cast"
+
+    member this.castQ(): Result<Q, string> =
+        match this with
+        | QTree q -> Ok q
+        | _ -> Error "failed to cast"
+
+    member this.castW(): Result<W, string> =
+        match this with
+        | WTree w -> Ok w
+        | _ -> Error "failed to cast"
+
+    member this.castF(): Result<F, string> =
+        match this with
+        | FTree f -> Ok f
+        | _ -> Error "failed to cast"
+
+    member this.castV(): Result<V, string> =
+        match this with
+        | VTree v -> Ok v
+        | _ -> Error "failed to cast"
+
+    member this.castTUnsafe(): T =
+        match this.castT() with
+        | Ok t -> t
+        | Error s -> failwith s
+
+    member this.castEUnsafe(): E =
+        match this.castE() with
+        | Ok e -> e
+        | Error s -> failwith s
+
+    member this.castQUnsafe(): Q =
+        match this.castQ() with
+        | Ok q -> q
+        | Error s -> failwith s
+
+    member this.castWUnsafe(): W =
+        match this.castW() with
+        | Ok w -> w
+        | Error s -> failwith s
+
+    member this.castFUnsafe(): F =
+        match this.castF() with
+        | Ok f -> f
+        | Error s -> failwith s
+
+    member this.castVUnsafe(): V =
+        match this.castV() with
+        | Ok v -> v
+        | Error s -> failwith s

@@ -19,7 +19,7 @@ let check = function
 let config = {
             FsCheckConfig.defaultConfig with
                 arbitrary = [typeof<Generators>]
-                maxTest = 10
+                maxTest = 30
                 endSize = 128
                 receivedArgs = fun _ name no args ->
                   logger.debugWithBP (
@@ -72,14 +72,14 @@ let tests =
                                       pk1Str pk1Str pk1Str pk2Str
             check dataWithNewLine
 
-        testCase "symmetrical conversion" <| fun _ ->
+        testCase "bidirectional conversion" <| fun _ ->
             let data =  sprintf "thres(2,and(pk(%s),aor(multi(2,%s,%s),time(1000))),pk(%s))" pk1Str pk1Str pk1Str pk2Str
             let data2 =  match data with
                          | Policy p -> printPolicy p
                          | _ -> failwith "Failed to parse policy"
             Expect.equal data data2 "Could not parse symmetrically"
 
-        testPropertyWithConfig config "Serialization should be bidirectional" <| fun (p: Policy) ->
+        testPropertyWithConfig config "bidirectional conversion as property" <| fun (p: Policy) ->
             match p.print() with
             | Policy p2 -> Expect.equal p p2
             | _ -> failwith "Failed to convert bidirectionally"
