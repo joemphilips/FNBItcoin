@@ -15,11 +15,11 @@ module internal Policy =
         }
 
     let nonRecursivePolicyGen: Gen<Policy> =
-        Gen.oneof [
-            Gen.map Key pubKeyGen
-            Gen.map (fun (num, pks) -> Multi(num, pks)) multiContentsGen
-            Gen.map Hash uint256Gen
-            Gen.map Time Arb.generate<uint32>
+        Gen.frequency [
+            (2, Gen.map Key pubKeyGen)
+            (1, Gen.map (fun (num, pks) -> Multi(num, pks)) multiContentsGen)
+            (2, Gen.map Hash uint256Gen)
+            (2, Gen.map Time Arb.generate<uint32>)
         ]
 
     let policy =
@@ -28,7 +28,7 @@ module internal Policy =
             | 0 -> nonRecursivePolicyGen
             | n when n > 0 ->
                 let subPolicyGen = policy' (n/2)
-                Gen.frequency [(1, nonRecursivePolicyGen); (3, recursivePolicyGen subPolicyGen)]
+                Gen.frequency [(2, nonRecursivePolicyGen); (3, recursivePolicyGen subPolicyGen)]
             | _ -> invalidArg "s" "Only positive arguments are allowed!"
         and recursivePolicyGen (subPolicyGen: Gen<Policy>)=
             Gen.oneof [
@@ -43,8 +43,8 @@ module internal Policy =
             ]
         and thresholdContentsGen (subGen: Gen<_>) =
             gen {
-                let! n = Gen.choose(1, 20) |> Gen.map uint32
-                let! subN = Gen.choose((int n), 20)
+                let! n = Gen.choose(1, 6) |> Gen.map uint32
+                let! subN = Gen.choose((int n), 6)
                 let! subs = Gen.arrayOfLength subN subGen
                 return (n, subs)
             }

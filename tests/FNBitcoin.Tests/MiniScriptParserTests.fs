@@ -19,7 +19,8 @@ let check = function
 let config = {
             FsCheckConfig.defaultConfig with
                 arbitrary = [typeof<Generators>]
-                maxTest = 5
+                maxTest = 10
+                endSize = 128
                 receivedArgs = fun _ name no args ->
                   logger.debugWithBP (
                     eventX "For {test} {no}, generated {args}"
@@ -78,7 +79,7 @@ let tests =
                          | _ -> failwith "Failed to parse policy"
             Expect.equal data data2 "Could not parse symmetrically"
 
-        ptestPropertyWithConfig config "Serialization should be bidirectional" <| fun (p: Policy) ->
+        testPropertyWithConfig config "Serialization should be bidirectional" <| fun (p: Policy) ->
             match p.print() with
             | Policy p2 -> Expect.equal p p2
             | _ -> failwith "Failed to convert bidirectionally"
