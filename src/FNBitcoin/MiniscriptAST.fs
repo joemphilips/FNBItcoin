@@ -1,57 +1,66 @@
 module internal MiniscriptAST
 open NBitcoin
 
-type E<'P> =
-    | CheckSig of 'P
-    | CheckMultiSig of 'P list
+type E =
+    | CheckSig of PubKey
+    | CheckMultiSig of PubKey list
     | Time of uint32
-    | Threshold of (E<'P> * W<'P> list)
-    | ParallelAnd of (E<'P> * W<'P>)
-    | CascadeAnd of (E<'P> * F<'P>)
-    | ParallelOr of (E<'P> * W<'P>)
-    | CascadeOr of (E<'P> * E<'P>)
-    | SwitchOrLeft of (E<'P> * F<'P>)
-    | SwitchOrRight of (E<'P> * F<'P>)
-    | Likely of F<'P>
-    | Unlikely of F<'P>
-and Q<'P> =
-    | Pubkey of 'P
-    | And of (V<'P> * Q<'P>)
-    | Or of (Q<'P> * Q<'P>)
-and W<'P> =
-    | CheckSig of 'P
+    | Threshold of (E * W list)
+    | ParallelAnd of (E * W)
+    | CascadeAnd of (E * F)
+    | ParallelOr of (E * W)
+    | CascadeOr of (E * E)
+    | SwitchOrLeft of (E * F)
+    | SwitchOrRight of (E * F)
+    | Likely of F
+    | Unlikely of F
+and Q =
+    | Pubkey of PubKey
+    | And of (V * Q)
+    | Or of (Q * Q)
+and W =
+    | CheckSig of PubKey
     | HashEqual of uint256
     | Time of uint32
-    | CastE of E<'P>
-and F<'P> =
-    | CheckSig of 'P
-    | CheckMultiSig of 'P list
+    | CastE of E
+and F =
+    | CheckSig of PubKey
+    | CheckMultiSig of PubKey list
     | Time of uint32
     | HashEqual of uint256
-    | Threshold of (E<'P> * W<'P> list)
-    | And of (V<'P> * F<'P>)
-    | CascadeOr of (E<'P> * V<'P>)
-    | SwitchOr of (F<'P> * F<'P>)
-    | SwitchOrV of (V<'P> * V<'P>)
-    | DelayedOr of (Q<'P> * Q<'P>)
-and V<'P> =
-    | CheckSig of 'P
-    | CheckMultiSig of 'P list
+    | Threshold of (E * W list)
+    | And of (V * F)
+    | CascadeOr of (E * V)
+    | SwitchOr of (F * F)
+    | SwitchOrV of (V * V)
+    | DelayedOr of (Q * Q)
+and V =
+    | CheckSig of PubKey
+    | CheckMultiSig of PubKey list
     | Time of uint32
     | HashEqual of uint256
-    | Threshold of (E<'P> * W<'P> list)
-    | And of (V<'P> * V<'P>)
-    | CascadeOr of (E<'P> * V<'P>)
-    | SwitchOr of (V<'P> * V<'P>)
-    | SwitchOrT of (T<'P> * T<'P>)
-    | DelayedOr of (Q<'P> * Q<'P>)
-and T<'P> =
+    | Threshold of (E * W list)
+    | And of (V * V)
+    | CascadeOr of (E * V)
+    | SwitchOr of (V * V)
+    | SwitchOrT of (T * T)
+    | DelayedOr of (Q * Q)
+and T =
     | Time of uint32
     | HashEqual of uint256
-    | And of (V<'P> * T<'P>)
-    | CascadeOr of (E<'P> * T<'P>)
-    | CascadeOrV of (E<'P> * V<'P>)
-    | SwitchOr of (T<'P> * T<'P>)
-    | SwitchOrV of (V<'P> * V<'P>)
-    | DelayedOr of (Q<'P> * Q<'P>)
-    | CastE of E<'P>
+    | And of (V * T)
+    | CascadeOr of (E * T)
+    | CascadeOrV of (E * V)
+    | SwitchOr of (T * T)
+    | SwitchOrV of (V * V)
+    | DelayedOr of (Q * Q)
+    | CastE of E
+
+type AST =
+    | E
+    | Q
+    | W
+    | F
+    | V
+    | T
+
