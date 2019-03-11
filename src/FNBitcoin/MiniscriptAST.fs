@@ -28,7 +28,7 @@ and F =
     | CheckMultiSig of uint32 * PubKey []
     | Time of uint32
     | HashEqual of uint256
-    | Threshold of (E * W list)
+    | Threshold of (uint32 * E * W[])
     | And of (V * F)
     | CascadeOr of (E * V)
     | SwitchOr of (F * F)
@@ -39,7 +39,7 @@ and V =
     | CheckMultiSig of uint32 * PubKey []
     | Time of uint32
     | HashEqual of uint256
-    | Threshold of (E * W list)
+    | Threshold of (uint32 * E * W[])
     | And of (V * V)
     | CascadeOr of (E * V)
     | SwitchOr of (V * V)

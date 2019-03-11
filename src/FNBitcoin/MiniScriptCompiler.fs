@@ -54,15 +54,100 @@ module Cost =
                  (lweight: float)
                  (rweight: float) =
         match newAst with
+        | T.Time _
+        | T.HashEqual _
+        | T.CastE _ -> failwith "unreachable"
+        | T.And _ ->
+            {
+                ast=TTree newAst
+                pkCost=left.pkCost + right.pkCost
+                satCost=left.satCost + right.satCost
+                dissatCost=0.0
+            }
+        | T.ParallelOr _ ->
+            {
+                ast=TTree newAst
+                pkCost=left.pkCost + right.pkCost + 1u
+                satCost=(left.satCost + right.dissatCost) * lweight + (right.satCost + left.dissatCost) * rweight
+                dissatCost=0.0
+            }
+        | T.CascadeOr _
+        | T.CascadeOrV _ ->
+            {
+                ast=TTree newAst
+                pkCost=left.pkCost + right.pkCost + 3u
+                satCost=left.satCost * lweight + (right.satCost + left.dissatCost) * rweight
+                dissatCost=0.0
+            }
+        | T.SwitchOr _ ->
+            {
+                ast=TTree newAst
+                pkCost=left.pkCost + right.pkCost + 3u
+                satCost=(left.satCost + 2.0) * lweight + (right.satCost + 1.0) * rweight
+                dissatCost=0.0
+            }
+        | T.SwitchOrV _ ->
+            {
+                ast=TTree newAst
+                pkCost=left.pkCost + right.pkCost + 4u
+                satCost=(left.satCost + 2.0) * lweight + (right.satCost + 1.0) * rweight
+                dissatCost=0.0
+            }
+        | T.DelayedOr _ ->
+            {
+                ast=TTree newAst
+                pkCost=left.pkCost + right.pkCost + 4u
+                satCost=72.0 + (left.satCost + 2.0) * lweight + (right.satCost + 1.0) * rweight
+                dissatCost=0.0
+            }
         | _ -> failwith "notimplemented"
 
-    let fromPairToQCost (left:Cost)
+    let fromPairToVCost (left:Cost)
                  (right: Cost)
-                 (newAst: Q)
+                 (newAst: V)
                  (lweight: float)
                  (rweight: float) =
         match newAst with
-        | _ -> failwith "notimplemented"
+        | V.CheckSig _
+        | V.CheckMultiSig _
+        | V.Time _
+        | V.HashEqual _
+        | V.Threshold _ -> failwith "unreachable"
+        | V.And _ ->
+            {
+                ast=VTree newAst
+                pkCost=left.pkCost + right.pkCost
+                satCost=left.satCost + right.satCost
+                dissatCost=0.0
+            }
+        | V.CascadeOr _ ->
+            {
+                ast=VTree newAst
+                pkCost=left.pkCost + right.pkCost + 2u
+                satCost=(left.satCost * lweight) + (right.satCost + left.dissatCost) * rweight
+                dissatCost=0.0
+            }
+        | V.SwitchOr _ ->
+            {
+                ast=VTree newAst
+                pkCost=left.pkCost + right.pkCost + 3u
+                satCost=(left.satCost + 2.0) * lweight + (right.satCost + 1.0) * rweight
+                dissatCost=0.0
+            }
+        | V.SwitchOrT _ ->
+            {
+                ast=VTree newAst
+                pkCost=left.pkCost + right.pkCost + 4u
+                satCost=(left.satCost + 2.0) * lweight + (right.satCost + 1.0) * rweight
+                dissatCost=0.0
+            }
+        | V.DelayedOr _ ->
+            {
+                ast=VTree newAst
+                pkCost=left.pkCost + right.pkCost + 4u
+                satCost=(72.0 + left.satCost + 2.0) * lweight + (72.0 + right.satCost + 1.0) * rweight
+                dissatCost=0.0
+            }
 
     let fromPairToFCost (left:Cost)
                  (right: Cost)
@@ -73,6 +158,7 @@ module Cost =
         | F.CheckSig _
         | F.CheckMultiSig _
         | F.Time _
+        | F.HashEqual _
         | F.Threshold _ -> failwith "unreachable"
         | F.And _ -> 
             {
@@ -80,6 +166,34 @@ module Cost =
                 pkCost=left.pkCost + right.pkCost
                 satCost=left.satCost + right.satCost
                 dissatCost=0.0;
+            }
+        | F.CascadeOr _ ->
+            {
+                ast=FTree newAst
+                pkCost=left.pkCost + right.pkCost + 3u
+                satCost=left.satCost * lweight + (right.satCost + left.dissatCost) * rweight
+                dissatCost=0.0
+            }
+        | F.SwitchOr _ ->
+            {
+                ast=FTree newAst
+                pkCost=left.pkCost + right.pkCost + 3u
+                satCost=(left.satCost + 2.0) * lweight + (right.satCost + 1.0) * rweight
+                dissatCost=0.0
+            }
+        | F.SwitchOrV _ ->
+            {
+                ast=FTree newAst
+                pkCost=left.pkCost + right.pkCost + 4u
+                satCost=(left.satCost + 2.0) * lweight + (right.satCost + 1.0) * rweight
+                dissatCost=0.0
+            }
+        | F.DelayedOr _ ->
+            {
+                ast=FTree newAst
+                pkCost=left.pkCost + right.pkCost + 5u
+                satCost=72.0 + (left.satCost + 2.0) * lweight + (right.satCost + 1.0) * rweight
+                dissatCost=0.0
             }
 
     let fromPairToECost (left:Cost)
@@ -138,38 +252,27 @@ module Cost =
                 dissatCost=left.dissatCost + 1.0
             }
 
-    // TODO: Consider carefully about where swap case should be treated.
+    // TODO: Consider about treating swap case (eft <=> right) here.
     let fromTriple (triple: CostTriple)
                    (lweight: float)
                    (rweight: float): Cost[] =
         match triple.parent with
         | TTree t ->
-            let cost = fromPairToTCost triple.left triple.right t lweight rweight
-            let costSwap = fromPairToTCost triple.right triple.left t rweight lweight
-            [|cost; costSwap|]
+            fromPairToTCost triple.left triple.right t lweight rweight |> Array.singleton
         | ETree e ->
-            let cost = fromPairToECost triple.left triple.right e lweight rweight
-            let costSwap = fromPairToECost triple.right triple.left e rweight lweight
-            [|cost; costSwap|]
+            fromPairToECost triple.left triple.right e lweight rweight |> Array.singleton
         | FTree f ->
             match triple.condCombine with
             | (false) ->
-                let cost = fromPairToFCost triple.left triple.right f lweight rweight
-                let costSwap = fromPairToFCost triple.right triple.left f rweight lweight
-                [|cost; costSwap|]
+                fromPairToFCost triple.left triple.right f lweight rweight |> Array.singleton
             | (true) ->
                 let costBeforeCast = fromPairToFCost triple.left triple.right f lweight rweight
-                let costBeforeCastSwap = fromPairToFCost triple.right triple.left f rweight lweight
                 [|
                     likely(costBeforeCast)
                     unlikely(costBeforeCast)
-                    likely(costBeforeCastSwap)
-                    unlikely(costBeforeCastSwap)
                 |]
-        | QTree q ->
-            let cost = fromPairToQCost triple.left triple.right q lweight rweight
-            let costSwap = fromPairToQCost triple.right triple.left q rweight lweight
-            [|cost; costSwap|]
+        | VTree v ->
+            fromPairToVCost triple.left triple.right v lweight rweight |> Array.singleton
 
     let min_cost(a: Cost, b: Cost, p_sat: float, p_dissat: float) =
         let weight_one = (float a.pkCost) + p_sat * a.satCost + p_dissat * a.dissatCost
@@ -194,6 +297,7 @@ module Cost =
             |> fold_costs p_sat p_dissat
 
 module CompiledNode =
+    /// bytes length when a number is encoded as bitcoin CScriptNum
     let private scriptNumCost n =
         if n <= 16u then
             1u
@@ -217,6 +321,12 @@ module CompiledNode =
             one
         else
             two
+    let private getPkCost m (pks: PubKey[]) =
+        match (m > 16u, pks.Length > 16) with
+            | (true, true) -> 4
+            | (true, false) -> 3
+            | (false, true) -> 3
+            | (false, false) -> 2
 
     let rec fromPolicy (p: Policy): CompiledNode = 
         match p with
@@ -237,7 +347,7 @@ module CompiledNode =
             let e = best_e node p_sat p_dissat
             { ast = e.ast; pkCost = e.pkCost; satCost = e.satCost; dissatCost = 0.0 }
         | Time t ->
-            let num_cost = NBitcoin.Op.GetPushOp(int64 t).ToBytes().Length
+            let num_cost = scriptNumCost t
             { ast=TTree (T.Time t) ; pkCost=1u + uint32 num_cost; satCost=0.0; dissatCost=0.0 }
         | Hash h ->
             { ast=TTree (T.HashEqual h); pkCost=39u; satCost=33.0; dissatCost=0.0 }
@@ -271,8 +381,8 @@ module CompiledNode =
             let rt = best_t r (p_sat * lweight) 0.0
             let lv = best_v l (p_sat * lweight) 0.0
             let rv = best_v r (p_sat * lweight) 0.0
-            let lq = best_q l (p_sat * lweight) 0.0
-            let rq = best_q r (p_sat * lweight) 0.0
+            let maybelq = best_q l (p_sat * lweight) 0.0
+            let mayberq = best_q r (p_sat * lweight) 0.0
 
             let possibleCases = [|
                 {
@@ -335,14 +445,20 @@ module CompiledNode =
                     right=lv
                     condCombine=false
                 }
-                {
-                    parent=TTree(T.DelayedOr(lq.ast.castQUnsafe(), rq.ast.castQUnsafe()))
-                    left=lq
-                    right=rq
-                    condCombine=false
-                }
             |]
-            Cost.getMinimumCost possibleCases p_sat 0.0 lweight rweight
+            let casesWithQ = match maybelq, mayberq with
+                             | Some lq, Some rq ->
+                                 Array.append possibleCases
+                                              [|
+                                                  {
+                                                     parent=TTree(T.DelayedOr(lq.ast.castQUnsafe(), rq.ast.castQUnsafe()))
+                                                     left=lq
+                                                     right=rq
+                                                     condCombine=false
+                                                  }
+                                              |]
+                             | _ -> possibleCases
+            Cost.getMinimumCost casesWithQ p_sat 0.0 lweight rweight
 
 
     and best_e (node: CompiledNode) (p_sat: float) (p_dissat: float): Cost =
@@ -350,11 +466,7 @@ module CompiledNode =
         | Pk k -> 
             { ast = ETree(E.CheckSig k); pkCost = 35u; satCost = 72.0; dissatCost = 1.0 }
         | Multi (m, pks) ->
-            let num_cost = match (m > 16u, pks.Length > 16) with
-                           | (true, true) -> 4
-                           | (true, false) -> 3
-                           | (false, true) -> 3
-                           | (false, false) -> 2
+            let num_cost = getPkCost m pks
             let options = [{
                     ast=ETree(E.CheckMultiSig(m, pks))
                     pkCost=uint32 (num_cost + 34 * pks.Length + 1)
@@ -439,8 +551,8 @@ module CompiledNode =
             let rv = best_v r (p_sat * rweight) 0.0
             let lf = best_f l (p_sat * lweight) 0.0
             let rf = best_f r (p_sat * rweight) 0.0
-            let lq = best_q l (p_sat * lweight) 0.0
-            let rq = best_q r (p_sat * rweight) 0.0
+            let maybelq = best_q l (p_sat * lweight) 0.0
+            let mayberq = best_q r (p_sat * rweight) 0.0
             let possibleCases = [|
                 {
                     parent=ETree(E.ParallelOr(le_par.ast.castEUnsafe(), rw_par.ast.castWUnsafe()))
@@ -527,14 +639,26 @@ module CompiledNode =
                     right=lv
                     condCombine=true
                 }
-                {
-                    parent=FTree(F.DelayedOr(lq.ast.castQUnsafe(), rq.ast.castQUnsafe()))
-                    left=lq
-                    right=rq
-                    condCombine=true
-                }
                 |]
-            Cost.getMinimumCost possibleCases p_sat p_dissat lweight rweight
+            let casesWithQ = match maybelq, mayberq with
+                             | Some lq, Some rq ->
+                                 Array.append possibleCases
+                                              [|
+                                                  {
+                                                      parent=FTree(F.DelayedOr(lq.ast.castQUnsafe(), rq.ast.castQUnsafe()))
+                                                      left=lq
+                                                      right=rq
+                                                      condCombine=false
+                                                  }
+                                                  {
+                                                      parent=FTree(F.DelayedOr(rq.ast.castQUnsafe(), lq.ast.castQUnsafe()))
+                                                      left=rq
+                                                      right=lq
+                                                      condCombine=false
+                                                  }
+                                              |]
+                             | _ -> possibleCases
+            Cost.getMinimumCost casesWithQ p_sat p_dissat lweight rweight
 
         | Threshold (n, subs) -> 
             let num_cost = scriptNumCost n
@@ -573,39 +697,27 @@ module CompiledNode =
             let maybelq = best_q l p_sat p_dissat
             let mayberq = best_q r p_sat p_dissat
 
+            let cost v q =
+                {
+                ast=QTree(Q.And(v.ast.castVUnsafe(), q.ast.castQUnsafe()))
+                pkCost=v.pkCost + q.pkCost
+                satCost=v.satCost + q.satCost
+                dissatCost=0.0
+                } 
+
             let op = match maybelq, mayberq with
                      | None, Some rq ->
                         let lv = best_v l p_sat p_dissat
-                        [|{
-                            ast=QTree(Q.And(lv.ast.castVUnsafe(), rq.ast.castQUnsafe()))
-                            pkCost=lv.pkCost + rq.pkCost
-                            satCost=lv.satCost + rq.satCost
-                            dissatCost=0.0
-                        }|]
+                        [|cost lv rq|]
                      | Some lq, None ->
                          let rv = best_v r p_sat p_dissat
-                         [|{
-                             ast=QTree(Q.And(rv.ast.castVUnsafe(), lq.ast.castQUnsafe()))
-                             pkCost= rv.pkCost + lq.pkCost
-                             satCost=rv.satCost + lq.satCost
-                             dissatCost=0.0
-                         }|]
+                         [|cost rv lq|]
                      | Some lq, Some rq ->
                         let lv = best_v l p_sat p_dissat
                         let rv = best_v r p_sat p_dissat
                         [|
-                            {
-                            ast=QTree(Q.And(lv.ast.castVUnsafe(), rq.ast.castQUnsafe()))
-                            pkCost=lv.pkCost + rq.pkCost
-                            satCost=lv.satCost + rq.satCost
-                            dissatCost=0.0
-                            }
-                            {
-                             ast=QTree(Q.And(rv.ast.castVUnsafe(), lq.ast.castQUnsafe()))
-                             pkCost= rv.pkCost + lq.pkCost
-                             satCost=rv.satCost + lq.satCost
-                             dissatCost=0.0
-                             }
+                            cost lv rq
+                            cost rv lq
                          |]
                      | None, None -> [||]
             op |> Cost.fold_costs p_sat p_dissat |> Some
@@ -664,9 +776,257 @@ module CompiledNode =
 
 
     and best_f (node: CompiledNode) (p_sat: float) (p_dissat: float): Cost =
-        failwith "not impl"
+        match node with
+        | Pk k ->
+            {
+                ast=FTree(F.CheckSig(k))
+                pkCost=36u
+                satCost=72.0
+                dissatCost=1.0
+            }
+        | Multi (m, pks) ->
+            let num_cost = getPkCost m pks
+            {
+                ast=FTree(F.CheckMultiSig(m, pks))
+                pkCost=uint32 (num_cost + 34 * pks.Length) + 2u
+                satCost=1.0 + 72.0 * float m
+                dissatCost=0.0
+            }
+        | Time t ->
+            let num_cost = scriptNumCost t
+            {
+                ast=FTree(F.Time(t))
+                pkCost=2u + num_cost
+                satCost=0.0
+                dissatCost=0.0
+            }
+        | Hash h ->
+            {
+                ast=FTree(F.HashEqual(h))
+                pkCost=40u
+                satCost=33.0
+                dissatCost=0.0
+            }
+        | And (l, r) ->
+            let vl = best_v l p_sat 0.0
+            let vr = best_v r p_sat 0.0
+            let fl = best_f l p_sat 0.0
+            let fr = best_f r p_sat 0.0
+            let possibleCases =
+                [|
+                    {
+                        parent=FTree(F.And(vl.ast.castVUnsafe(), fr.ast.castFUnsafe()))
+                        left=vl
+                        right=fr
+                        condCombine=false
+                    }
+                    {
+                        parent=FTree(F.And(vr.ast.castVUnsafe(), fl.ast.castFUnsafe()))
+                        left=vr
+                        right=fl
+                        condCombine=false
+                    }
+                |]
+            Cost.getMinimumCost possibleCases p_sat 0.0 0.5 0.5
+        | Or(l, r, lweight, rweight) ->
+            let le_par = best_e l (p_sat * lweight) (p_sat + rweight)
+            let re_par = best_e r (p_sat * rweight) (p_sat * lweight)
+
+            let lf = best_f l (p_sat * lweight) 0.0
+            let rf = best_f r (p_sat * rweight) 0.0
+            let lv = best_v l (p_sat * lweight) 0.0
+            let rv = best_v r (p_sat * rweight) 0.0
+            let maybelq = best_q l (p_sat * lweight) 0.0
+            let mayberq = best_q r (p_sat * rweight) 0.0
+            let possibleCases =
+                [|
+                    {
+                        parent=FTree(F.CascadeOr(le_par.ast.castEUnsafe(), rv.ast.castVUnsafe()))
+                        left=le_par
+                        right=rv
+                        condCombine=false
+                    }
+                    {
+                        parent=FTree(F.CascadeOr(re_par.ast.castEUnsafe(), lv.ast.castVUnsafe()))
+                        left=re_par
+                        right=lv
+                        condCombine=false
+                    }
+                    {
+                        parent=FTree(F.SwitchOr(lf.ast.castFUnsafe(), rf.ast.castFUnsafe()))
+                        left=lf
+                        right=rf
+                        condCombine=false
+                    }
+                    {
+                        parent=FTree(F.SwitchOr(rf.ast.castFUnsafe(), lf.ast.castFUnsafe()))
+                        left=rf
+                        right=lf
+                        condCombine=false
+                    }
+                    {
+                        parent=FTree(F.SwitchOrV(lv.ast.castVUnsafe(), rv.ast.castVUnsafe()))
+                        left=lv
+                        right=rv
+                        condCombine=false
+                    }
+                    {
+                        parent=FTree(F.SwitchOrV(rv.ast.castVUnsafe(), lv.ast.castVUnsafe()))
+                        left=rv
+                        right=lv
+                        condCombine=false
+                    }
+                |]
+            let casesWithQ = match maybelq, mayberq with
+                             | Some lq, Some rq ->
+                                 Array.append possibleCases
+                                              [|
+                                                  {
+                                                      parent=FTree(F.DelayedOr(lq.ast.castQUnsafe(), rq.ast.castQUnsafe()))
+                                                      left=lq
+                                                      right=rq
+                                                      condCombine=false
+                                                  }
+                                              |]
+                             | _ -> possibleCases
+            Cost.getMinimumCost casesWithQ p_sat 0.0 lweight rweight
+        | Threshold(n, subs) ->
+            let num_cost = scriptNumCost n
+            let avg_cost = float n / float subs.Length
+            let e = best_e subs.[0] (p_sat * avg_cost) (p_dissat + p_sat * (1.0 - avg_cost))
+            let ws = subs
+                     |> Array.map(fun s -> best_w s (p_sat * avg_cost) (p_dissat + p_sat * (1.0 - avg_cost)) )
+
+            let pk_cost = ws |> Array.fold(fun acc w -> acc + w.pkCost + 1u) (2u + num_cost + e.pkCost)
+            let sat_cost = ws |> Array.fold(fun acc w -> acc + w.satCost) e.satCost
+            let dissat_cost = ws |> Array.fold(fun acc w -> acc + w.dissatCost) e.dissatCost
+            let wsast = ws |> Array.map(fun w -> w.ast.castWUnsafe())
+            {
+                ast=FTree(F.Threshold(n, e.ast.castEUnsafe(), wsast))
+                pkCost=pk_cost
+                satCost=sat_cost * avg_cost + dissat_cost * (1.0 - avg_cost)
+                dissatCost=0.0
+            }
     and best_v (node: CompiledNode) (p_sat: float) (p_dissat: float): Cost =
-        failwith "not impl"
+         match node with
+         | Pk k ->
+             {
+                 ast=VTree(V.CheckSig(k))
+                 pkCost=35u
+                 satCost=0.0
+                 dissatCost=0.0
+             }
+         | Multi(m, pks) ->
+             let num_cost = getPkCost m pks
+             {
+                 ast=VTree(V.CheckMultiSig(m, pks))
+                 pkCost=uint32 (num_cost + 34 * pks.Length + 1)
+                 satCost=1.0 + 72.0 * float m
+                 dissatCost=0.0
+             }
+         | Time t ->
+             let num_cost = scriptNumCost t
+             {
+                 ast=VTree(V.Time(t))
+                 pkCost=2u + num_cost
+                 satCost=0.0
+                 dissatCost=0.0
+             }
+         | Hash h ->
+             {
+                 ast=VTree(V.HashEqual(h))
+                 pkCost=39u
+                 satCost=33.0
+                 dissatCost=0.0
+             }
+         | And (l, r) ->
+             let lv = best_v l p_sat 0.0
+             let rv = best_v r p_sat 0.0
+             {
+                 ast=VTree(V.And(lv.ast.castVUnsafe(), rv.ast.castVUnsafe()))
+                 pkCost=lv.pkCost + rv.pkCost
+                 satCost=lv.satCost + rv.satCost
+                 dissatCost=0.0
+             }
+         | Or(l, r, lweight, rweight) ->
+             let le_par = best_e l (p_sat * lweight) (p_sat * rweight)
+             let re_par = best_e r (p_sat * rweight) (p_sat * lweight)
+             let lt = best_t l (p_sat * lweight) 0.0
+             let rt = best_t r (p_sat * rweight) 0.0
+             let lv = best_v l (p_sat * lweight) 0.0
+             let rv = best_v r (p_sat * rweight) 0.0
+             let maybelq = best_q l (p_sat * lweight) 0.0
+             let mayberq = best_q r (p_sat * rweight) 0.0
+
+             let possibleCases =
+                 [|
+                     {
+                        parent=VTree(V.CascadeOr(le_par.ast.castEUnsafe(), rv.ast.castVUnsafe()))
+                        left=le_par
+                        right=rv
+                        condCombine=false
+                     }
+                     {
+                        parent=VTree(V.CascadeOr(re_par.ast.castEUnsafe(), lv.ast.castVUnsafe()))
+                        left=re_par
+                        right=lv
+                        condCombine=false
+                     }
+                     {
+                        parent=VTree(V.SwitchOr(lv.ast.castVUnsafe(), rv.ast.castVUnsafe()))
+                        left=lv
+                        right=rv
+                        condCombine=false
+                     }
+                     {
+                        parent=VTree(V.SwitchOr(rv.ast.castVUnsafe(), lv.ast.castVUnsafe()))
+                        left=rv
+                        right=lv
+                        condCombine=false
+                     }
+                     {
+                        parent=VTree(V.SwitchOrT(lt.ast.castTUnsafe(), rt.ast.castTUnsafe()))
+                        left=lt
+                        right=rt
+                        condCombine=false
+                     }
+                     {
+                        parent=VTree(V.SwitchOrT(rt.ast.castTUnsafe(), lt.ast.castTUnsafe()))
+                        left=rt
+                        right=lt
+                        condCombine=false
+                     }
+                 |]
+             let casesWithQ = match maybelq, mayberq with
+                             | Some lq, Some rq ->
+                                 Array.append possibleCases
+                                              [|
+                                                  {
+                                                      parent=VTree(V.DelayedOr(lq.ast.castQUnsafe(), rq.ast.castQUnsafe()))
+                                                      left=lq
+                                                      right=rq
+                                                      condCombine=false
+                                                  }
+                                              |]
+                             | _ -> possibleCases
+             Cost.getMinimumCost casesWithQ p_sat 0.0 lweight rweight
+         | Threshold(n, subs) ->
+            let num_cost = scriptNumCost n
+            let avg_cost = float n / float subs.Length
+            let e = best_e subs.[0] (p_sat * avg_cost) (p_sat * (1.0 - avg_cost))
+            let ws = subs
+                     |> Array.map(fun s -> best_w s (p_sat * avg_cost) (p_sat * (1.0 - avg_cost)) )
+
+            let pk_cost = ws |> Array.fold(fun acc w -> acc + w.pkCost + 1u) (1u + num_cost + e.pkCost)
+            let sat_cost = ws |> Array.fold(fun acc w -> acc + w.satCost) e.satCost
+            let dissat_cost = ws |> Array.fold(fun acc w -> acc + w.dissatCost) e.dissatCost
+            let wsast = ws |> Array.map(fun w -> w.ast.castWUnsafe())
+            {
+                ast=VTree(V.Threshold(n, e.ast.castEUnsafe(), wsast))
+                pkCost=pk_cost
+                satCost=sat_cost * avg_cost + dissat_cost * (1.0 - avg_cost)
+                dissatCost=0.0
+            }
 
 type CompiledNode with
     static member fromPolicy(p: Policy) = CompiledNode.fromPolicy p
