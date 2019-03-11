@@ -560,10 +560,109 @@ module CompiledNode =
             let cond2 = Cost.unlikely(f)
             let nonCond = Cost.min_cost(cond1, cond2, p_sat, p_dissat)
             Cost.min_cost(cond, nonCond, p_sat, p_dissat)
-    and best_q (node: CompiledNode) (p_sat: float) (p_dissat: float): Cost =
-        failwith "not impl"
+    and best_q (node: CompiledNode) (p_sat: float) (p_dissat: float): Cost option =
+        match node with
+        | Pk pk ->
+            {
+                ast=QTree(Q.Pubkey(pk))
+                pkCost=34u
+                satCost=0.0
+                dissatCost=0.0
+            } |> Some
+        | And (l, r) ->
+            let maybelq = best_q l p_sat p_dissat
+            let mayberq = best_q r p_sat p_dissat
+
+            let op = match maybelq, mayberq with
+                     | None, Some rq ->
+                        let lv = best_v l p_sat p_dissat
+                        [|{
+                            ast=QTree(Q.And(lv.ast.castVUnsafe(), rq.ast.castQUnsafe()))
+                            pkCost=lv.pkCost + rq.pkCost
+                            satCost=lv.satCost + rq.satCost
+                            dissatCost=0.0
+                        }|]
+                     | Some lq, None ->
+                         let rv = best_v r p_sat p_dissat
+                         [|{
+                             ast=QTree(Q.And(rv.ast.castVUnsafe(), lq.ast.castQUnsafe()))
+                             pkCost= rv.pkCost + lq.pkCost
+                             satCost=rv.satCost + lq.satCost
+                             dissatCost=0.0
+                         }|]
+                     | Some lq, Some rq ->
+                        let lv = best_v l p_sat p_dissat
+                        let rv = best_v r p_sat p_dissat
+                        [|
+                            {
+                            ast=QTree(Q.And(lv.ast.castVUnsafe(), rq.ast.castQUnsafe()))
+                            pkCost=lv.pkCost + rq.pkCost
+                            satCost=lv.satCost + rq.satCost
+                            dissatCost=0.0
+                            }
+                            {
+                             ast=QTree(Q.And(rv.ast.castVUnsafe(), lq.ast.castQUnsafe()))
+                             pkCost= rv.pkCost + lq.pkCost
+                             satCost=rv.satCost + lq.satCost
+                             dissatCost=0.0
+                             }
+                         |]
+                     | None, None -> [||]
+            op |> Cost.fold_costs p_sat p_dissat |> Some
+        | Or (l, r, lweight, rweight) ->
+            let maybelq = best_q l (p_sat * lweight) 0.0
+            let mayberq = best_q r (p_sat + rweight) 0.0
+            match maybelq, mayberq with
+            | Some lq, Some rq ->
+                [|
+                    {
+                        ast=QTree(Q.Or(lq.ast.castQUnsafe(), rq.ast.castQUnsafe()))
+                        pkCost= lq.pkCost + rq.pkCost + 3u
+                        satCost=lweight * (2.0 + lq.satCost) + rweight * (1.0 + rq.satCost)
+                        dissatCost=0.0
+                    }
+                    {
+                        ast=QTree(Q.Or(rq.ast.castQUnsafe(), lq.ast.castQUnsafe()))
+                        pkCost= rq.pkCost + lq.pkCost + 3u
+                        satCost=lweight * (1.0 + lq.satCost) + rweight * (2.0 + rq.satCost)
+                        dissatCost=0.0
+                    }
+                |] |> Cost.fold_costs p_sat p_dissat |> Some
+            | _ -> None
+        | _ -> None
     and best_w (node: CompiledNode) (p_sat: float) (p_dissat: float): Cost =
-        failwith "not impl"
+        match node with
+        | Pk k ->
+            {
+                ast=WTree(W.CheckSig(k))
+                pkCost=36u
+                satCost=72.0
+                dissatCost=1.0
+            }
+        | Time t ->
+            let num_cost = scriptNumCost t
+            {
+                ast=WTree(W.Time(t))
+                pkCost=6u + num_cost
+                satCost=2.0
+                dissatCost=1.0
+            }
+        | Hash h ->
+            {
+                ast=WTree(W.HashEqual(h))
+                pkCost=45u
+                satCost=33.0
+                dissatCost=1.0
+            }
+        | _ ->
+            let c = best_e node p_sat p_dissat
+            {
+                c with
+                    ast=WTree(W.CastE(c.ast.castEUnsafe()))
+                    pkCost=c.pkCost + 2u
+            }
+
+
     and best_f (node: CompiledNode) (p_sat: float) (p_dissat: float): Cost =
         failwith "not impl"
     and best_v (node: CompiledNode) (p_sat: float) (p_dissat: float): Cost =
