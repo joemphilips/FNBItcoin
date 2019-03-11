@@ -3,9 +3,9 @@ open NBitcoin
 
 type E =
     | CheckSig of PubKey
-    | CheckMultiSig of PubKey list
+    | CheckMultiSig of uint32 * PubKey []
     | Time of uint32
-    | Threshold of (E * W list)
+    | Threshold of (uint32 * E * W [])
     | ParallelAnd of (E * W)
     | CascadeAnd of (E * F)
     | ParallelOr of (E * W)
@@ -25,7 +25,7 @@ and W =
     | CastE of E
 and F =
     | CheckSig of PubKey
-    | CheckMultiSig of PubKey list
+    | CheckMultiSig of uint32 * PubKey []
     | Time of uint32
     | HashEqual of uint256
     | Threshold of (E * W list)
@@ -36,7 +36,7 @@ and F =
     | DelayedOr of (Q * Q)
 and V =
     | CheckSig of PubKey
-    | CheckMultiSig of PubKey list
+    | CheckMultiSig of uint32 * PubKey []
     | Time of uint32
     | HashEqual of uint256
     | Threshold of (E * W list)
@@ -49,6 +49,7 @@ and T =
     | Time of uint32
     | HashEqual of uint256
     | And of (V * T)
+    | ParallelOr of (E * W)
     | CascadeOr of (E * T)
     | CascadeOrV of (E * V)
     | SwitchOr of (T * T)
