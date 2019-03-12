@@ -342,6 +342,7 @@ module CompiledNode =
         | Policy.Or(e1, e2) -> Or(fromPolicy e1, fromPolicy e2, 0.5, 0.5)
         | Policy.AsymmetricOr(e1, e2) -> Or(fromPolicy e1, fromPolicy e2, 127.0/128.0 , 1.0/128.0)
 
+    // TODO: cache
     let rec best_t (node: CompiledNode, p_sat: float, p_dissat: float): Cost =
         match node with
         | Pk _ | Multi _ | Threshold _ ->

@@ -1,6 +1,7 @@
 namespace FNBitcoin.MiniScript
 open MiniscriptAST
 
+/// wrapper for top-level AST
 type MiniScript = MiniScript of AST
 
 module MiniScript =
