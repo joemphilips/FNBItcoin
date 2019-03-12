@@ -345,7 +345,12 @@ module CompiledNode =
         match node with
         | Pk _ | Multi _ | Threshold _ ->
             let e = best_e node p_sat p_dissat
-            { ast = e.ast; pkCost = e.pkCost; satCost = e.satCost; dissatCost = 0.0 }
+            {
+                ast = TTree(T.CastE(e.ast.castEUnsafe()))
+                pkCost = e.pkCost
+                satCost = e.satCost
+                dissatCost = 0.0
+            }
         | Time t ->
             let num_cost = scriptNumCost t
             { ast=TTree (T.Time t) ; pkCost=1u + uint32 num_cost; satCost=0.0; dissatCost=0.0 }
@@ -720,7 +725,7 @@ module CompiledNode =
                             cost rv lq
                          |]
                      | None, None -> [||]
-            op |> Cost.fold_costs p_sat p_dissat |> Some
+            if op.Length = 0 then None else op |> Cost.fold_costs p_sat p_dissat |> Some
         | Or (l, r, lweight, rweight) ->
             let maybelq = best_q l (p_sat * lweight) 0.0
             let mayberq = best_q r (p_sat + rweight) 0.0
@@ -1030,3 +1035,5 @@ module CompiledNode =
 
 type CompiledNode with
     static member fromPolicy(p: Policy) = CompiledNode.fromPolicy p
+    member this.compile() = 
+        CompiledNode.best_t this 1.0 0.0
