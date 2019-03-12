@@ -7,8 +7,11 @@
     <Tailcalls>true</Tailcalls>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="MiniScriptParserTmp.fs" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="MiniScriptParserTmp.fs" />
+    <Compile Include="Utils.fs" />
     <Compile Include="MiniscriptAST.fs" />
     <Compile Include="MiniScriptParser.fs" />
     <Compile Include="MiniScriptCompiler.fs" />

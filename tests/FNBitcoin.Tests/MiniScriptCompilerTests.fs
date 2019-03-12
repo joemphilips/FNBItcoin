@@ -1,7 +1,7 @@
 module MiniScriptCompilerTests
 open Expecto
 open Expecto.Logging
-open FsCheck
+
 open Expecto.Logging.Message
 open FNBitcoin.Tests.Generators
 

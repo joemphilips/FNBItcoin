@@ -2,6 +2,7 @@ module FNBitcoin.MiniScriptCompiler
 open NBitcoin
 open FNBitcoin.MiniScriptParser
 open MiniscriptAST
+open System.Collections.Generic
 
 
 type CompiledNode =
@@ -341,10 +342,10 @@ module CompiledNode =
         | Policy.Or(e1, e2) -> Or(fromPolicy e1, fromPolicy e2, 0.5, 0.5)
         | Policy.AsymmetricOr(e1, e2) -> Or(fromPolicy e1, fromPolicy e2, 127.0/128.0 , 1.0/128.0)
 
-    let rec best_t (node: CompiledNode) (p_sat: float) (p_dissat: float): Cost =
+    let rec best_t (node: CompiledNode, p_sat: float, p_dissat: float): Cost =
         match node with
         | Pk _ | Multi _ | Threshold _ ->
-            let e = best_e node p_sat p_dissat
+            let e = best_e(node, p_sat, p_dissat)
             {
                 ast = TTree(T.CastE(e.ast.castEUnsafe()))
                 pkCost = e.pkCost
@@ -357,10 +358,10 @@ module CompiledNode =
         | Hash h ->
             { ast=TTree (T.HashEqual h); pkCost=39u; satCost=33.0; dissatCost=0.0 }
         | And (l, r) ->
-            let vl = best_v l p_sat 0.0
-            let vr = best_v r p_sat 0.0
-            let tl = best_t l p_sat 0.0
-            let tr = best_t r p_sat 0.0
+            let vl = best_v (l, p_sat, 0.0)
+            let vr = best_v (r, p_sat, 0.0)
+            let tl = best_t (l, p_sat, 0.0)
+            let tr = best_t (r, p_sat, 0.0)
             let possibleCases = [|
                     {
                         parent= TTree(T.And(vl.ast.castVUnsafe(), tr.ast.castTUnsafe()))
@@ -377,17 +378,17 @@ module CompiledNode =
                 |]
             Cost.getMinimumCost possibleCases p_sat p_dissat 0.0 0.0
         | Or (l, r, lweight, rweight) ->
-            let le = best_e l (p_sat * lweight) (p_sat * rweight)
-            let re = best_e r (p_sat * rweight) (p_sat * lweight)
-            let lw = best_w l (p_sat * lweight) (p_sat * rweight)
-            let rw = best_w r (p_sat * rweight) (p_sat * lweight)
+            let le = best_e (l, (p_sat * lweight), (p_sat * rweight))
+            let re = best_e (r, (p_sat * rweight), (p_sat * lweight))
+            let lw = best_w (l, (p_sat * lweight), (p_sat * rweight))
+            let rw = best_w (r, (p_sat * rweight), (p_sat * lweight))
 
-            let lt = best_t l (p_sat * lweight) 0.0
-            let rt = best_t r (p_sat * lweight) 0.0
-            let lv = best_v l (p_sat * lweight) 0.0
-            let rv = best_v r (p_sat * lweight) 0.0
-            let maybelq = best_q l (p_sat * lweight) 0.0
-            let mayberq = best_q r (p_sat * lweight) 0.0
+            let lt = best_t (l, (p_sat * lweight), 0.0)
+            let rt = best_t (r, (p_sat * lweight), 0.0)
+            let lv = best_v (l, (p_sat * lweight), 0.0)
+            let rv = best_v (r, (p_sat * lweight), 0.0)
+            let maybelq = best_q (l, (p_sat * lweight), 0.0)
+            let mayberq = best_q (r, (p_sat * lweight), 0.0)
 
             let possibleCases = [|
                 {
@@ -466,7 +467,7 @@ module CompiledNode =
             Cost.getMinimumCost casesWithQ p_sat 0.0 lweight rweight
 
 
-    and best_e (node: CompiledNode) (p_sat: float) (p_dissat: float): Cost =
+    and best_e (node: CompiledNode, p_sat: float, p_dissat: float): Cost =
         match node with
         | Pk k -> 
             { ast = ETree(E.CheckSig k); pkCost = 35u; satCost = 72.0; dissatCost = 1.0 }
@@ -481,7 +482,7 @@ module CompiledNode =
             if not (p_dissat > 0.0) then
                 options.[0]
             else
-                let bestf = best_f node p_sat 0.0
+                let bestf = best_f (node, p_sat, 0.0)
                 let options2 = [Cost.likely(bestf); Cost.unlikely(bestf)]
                 List.concat[ options; options2 ]
                     |> List.toArray |> Cost.fold_costs p_sat p_dissat
@@ -489,18 +490,18 @@ module CompiledNode =
             let num_cost = scriptNumCost n
             { ast=ETree(E.Time n); pkCost=5u + num_cost; satCost=2.0; dissatCost=1.0}
         | Hash h ->
-            let fcost = best_f node p_sat p_dissat
+            let fcost = best_f(node, p_sat, p_dissat)
             minCost(Cost.likely fcost, Cost.unlikely fcost, p_sat, p_dissat)
         | And (l, r) ->
-            let le = best_e l p_sat p_dissat
-            let re = best_e r p_sat p_dissat
-            let lw = best_w l p_sat p_dissat
-            let rw = best_w r p_sat p_dissat
+            let le = best_e (l, p_sat, p_dissat)
+            let re = best_e (r, p_sat, p_dissat)
+            let lw = best_w (l, p_sat, p_dissat)
+            let rw = best_w (r, p_sat, p_dissat)
 
-            let lf = best_f l p_sat 0.0
-            let rf = best_f r p_sat 0.0
-            let lv = best_v l p_sat 0.0
-            let rv = best_v r p_sat 0.0
+            let lf = best_f (l, p_sat, 0.0)
+            let rf = best_f (r, p_sat, 0.0)
+            let lv = best_v (l, p_sat, 0.0)
+            let rv = best_v (r, p_sat, 0.0)
 
             let possibleCases = [|
                 {
@@ -542,22 +543,22 @@ module CompiledNode =
             |]
             Cost.getMinimumCost possibleCases p_sat p_dissat 0.5 0.5
         | Or (l, r, lweight, rweight) -> 
-            let le_par = best_e l (p_sat * lweight) (p_dissat + p_sat * rweight)
-            let re_par = best_e r (p_sat * lweight) (p_dissat + p_sat * rweight)
-            let lw_par = best_w l (p_sat * lweight) (p_dissat + p_sat * rweight)
-            let rw_par = best_w r (p_sat * lweight) (p_dissat + p_sat * rweight)
-            let le_cas = best_e l (p_sat * lweight) (p_dissat)
-            let re_cas = best_e r (p_sat * lweight) (p_dissat)
+            let le_par = best_e (l, (p_sat * lweight), (p_dissat + p_sat * rweight))
+            let re_par = best_e (r, (p_sat * lweight), (p_dissat + p_sat * rweight))
+            let lw_par = best_w (l, (p_sat * lweight), (p_dissat + p_sat * rweight))
+            let rw_par = best_w (r, (p_sat * lweight), (p_dissat + p_sat * rweight))
+            let le_cas = best_e (l, (p_sat * lweight), (p_dissat))
+            let re_cas = best_e (r, (p_sat * lweight), (p_dissat))
 
-            let le_cond_par = best_e l (p_sat * lweight) (p_sat * rweight)
-            let re_cond_par = best_e r (p_sat * lweight) (p_sat * lweight)
+            let le_cond_par = best_e (l, (p_sat * lweight), (p_sat * rweight))
+            let re_cond_par = best_e (r, (p_sat * lweight), (p_sat * lweight))
 
-            let lv = best_v l (p_sat * lweight) 0.0
-            let rv = best_v r (p_sat * rweight) 0.0
-            let lf = best_f l (p_sat * lweight) 0.0
-            let rf = best_f r (p_sat * rweight) 0.0
-            let maybelq = best_q l (p_sat * lweight) 0.0
-            let mayberq = best_q r (p_sat * rweight) 0.0
+            let lv = best_v (l, (p_sat * lweight), 0.0)
+            let rv = best_v (r, (p_sat * rweight), 0.0)
+            let lf = best_f (l, (p_sat * lweight), 0.0)
+            let rf = best_f (r, (p_sat * rweight), 0.0)
+            let maybelq = best_q (l, (p_sat * lweight), 0.0)
+            let mayberq = best_q (r, (p_sat * rweight), 0.0)
             let possibleCases = [|
                 {
                     parent=ETree(E.ParallelOr(le_par.ast.castEUnsafe(), rw_par.ast.castWUnsafe()))
@@ -668,10 +669,10 @@ module CompiledNode =
         | Threshold (n, subs) -> 
             let num_cost = scriptNumCost n
             let avgCost = float n / float subs.Length
-            let e = best_e subs.[0] (p_sat * avgCost) (p_dissat + p_sat * (1.0 - avgCost))
+            let e = best_e (subs.[0], (p_sat * avgCost), (p_dissat + p_sat * (1.0 - avgCost)))
 
             let ws = subs
-                     |> Array.map(fun s -> best_w s (p_sat * avgCost) (p_dissat + p_sat * (1.0 - avgCost)) )
+                     |> Array.map(fun s -> best_w (s, (p_sat * avgCost), (p_dissat + p_sat * (1.0 - avgCost))))
 
             let pk_cost = ws |> Array.fold(fun acc w -> acc + w.pkCost) (1u + num_cost + e.pkCost)
             let sat_cost = ws |> Array.fold(fun acc w -> acc + w.satCost) e.satCost
@@ -684,12 +685,12 @@ module CompiledNode =
                     dissatCost=dissat_cost
                 }
 
-            let f = best_f node p_sat 0.0
+            let f = best_f (node, p_sat, 0.0)
             let cond1 = Cost.likely(f)
             let cond2 = Cost.unlikely(f)
             let nonCond = Cost.min_cost(cond1, cond2, p_sat, p_dissat)
             Cost.min_cost(cond, nonCond, p_sat, p_dissat)
-    and best_q (node: CompiledNode) (p_sat: float) (p_dissat: float): Cost option =
+    and best_q (node: CompiledNode, p_sat: float, p_dissat: float): Cost option =
         match node with
         | Pk pk ->
             {
@@ -699,8 +700,8 @@ module CompiledNode =
                 dissatCost=0.0
             } |> Some
         | And (l, r) ->
-            let maybelq = best_q l p_sat p_dissat
-            let mayberq = best_q r p_sat p_dissat
+            let maybelq = best_q (l, p_sat, p_dissat)
+            let mayberq = best_q (r, p_sat, p_dissat)
 
             let cost v q =
                 {
@@ -712,14 +713,14 @@ module CompiledNode =
 
             let op = match maybelq, mayberq with
                      | None, Some rq ->
-                        let lv = best_v l p_sat p_dissat
+                        let lv = best_v (l, p_sat, p_dissat)
                         [|cost lv rq|]
                      | Some lq, None ->
-                         let rv = best_v r p_sat p_dissat
+                         let rv = best_v (r, p_sat, p_dissat)
                          [|cost rv lq|]
                      | Some lq, Some rq ->
-                        let lv = best_v l p_sat p_dissat
-                        let rv = best_v r p_sat p_dissat
+                        let lv = best_v (l, p_sat, p_dissat)
+                        let rv = best_v (r, p_sat, p_dissat)
                         [|
                             cost lv rq
                             cost rv lq
@@ -727,8 +728,8 @@ module CompiledNode =
                      | None, None -> [||]
             if op.Length = 0 then None else op |> Cost.fold_costs p_sat p_dissat |> Some
         | Or (l, r, lweight, rweight) ->
-            let maybelq = best_q l (p_sat * lweight) 0.0
-            let mayberq = best_q r (p_sat + rweight) 0.0
+            let maybelq = best_q (l, (p_sat * lweight), 0.0)
+            let mayberq = best_q (r, (p_sat + rweight), 0.0)
             match maybelq, mayberq with
             | Some lq, Some rq ->
                 [|
@@ -747,7 +748,7 @@ module CompiledNode =
                 |] |> Cost.fold_costs p_sat p_dissat |> Some
             | _ -> None
         | _ -> None
-    and best_w (node: CompiledNode) (p_sat: float) (p_dissat: float): Cost =
+    and best_w (node: CompiledNode, p_sat: float, p_dissat: float): Cost =
         match node with
         | Pk k ->
             {
@@ -772,7 +773,7 @@ module CompiledNode =
                 dissatCost=1.0
             }
         | _ ->
-            let c = best_e node p_sat p_dissat
+            let c = best_e (node, p_sat, p_dissat)
             {
                 c with
                     ast=WTree(W.CastE(c.ast.castEUnsafe()))
@@ -780,7 +781,7 @@ module CompiledNode =
             }
 
 
-    and best_f (node: CompiledNode) (p_sat: float) (p_dissat: float): Cost =
+    and best_f (node: CompiledNode, p_sat: float, p_dissat: float): Cost =
         match node with
         | Pk k ->
             {
@@ -813,10 +814,10 @@ module CompiledNode =
                 dissatCost=0.0
             }
         | And (l, r) ->
-            let vl = best_v l p_sat 0.0
-            let vr = best_v r p_sat 0.0
-            let fl = best_f l p_sat 0.0
-            let fr = best_f r p_sat 0.0
+            let vl = best_v (l, p_sat, 0.0)
+            let vr = best_v (r, p_sat, 0.0)
+            let fl = best_f (l, p_sat, 0.0)
+            let fr = best_f (r, p_sat, 0.0)
             let possibleCases =
                 [|
                     {
@@ -834,15 +835,15 @@ module CompiledNode =
                 |]
             Cost.getMinimumCost possibleCases p_sat 0.0 0.5 0.5
         | Or(l, r, lweight, rweight) ->
-            let le_par = best_e l (p_sat * lweight) (p_sat + rweight)
-            let re_par = best_e r (p_sat * rweight) (p_sat * lweight)
+            let le_par = best_e (l, (p_sat * lweight), (p_sat + rweight))
+            let re_par = best_e (r, (p_sat * rweight), (p_sat * lweight))
 
-            let lf = best_f l (p_sat * lweight) 0.0
-            let rf = best_f r (p_sat * rweight) 0.0
-            let lv = best_v l (p_sat * lweight) 0.0
-            let rv = best_v r (p_sat * rweight) 0.0
-            let maybelq = best_q l (p_sat * lweight) 0.0
-            let mayberq = best_q r (p_sat * rweight) 0.0
+            let lf = best_f (l, (p_sat * lweight), 0.0)
+            let rf = best_f (r, (p_sat * rweight), 0.0)
+            let lv = best_v (l, (p_sat * lweight), 0.0)
+            let rv = best_v (r, (p_sat * rweight), 0.0)
+            let maybelq = best_q (l, (p_sat * lweight), 0.0)
+            let mayberq = best_q (r, (p_sat * rweight), 0.0)
             let possibleCases =
                 [|
                     {
@@ -898,9 +899,9 @@ module CompiledNode =
         | Threshold(n, subs) ->
             let num_cost = scriptNumCost n
             let avg_cost = float n / float subs.Length
-            let e = best_e subs.[0] (p_sat * avg_cost) (p_dissat + p_sat * (1.0 - avg_cost))
+            let e = best_e (subs.[0], (p_sat * avg_cost), (p_dissat + p_sat * (1.0 - avg_cost)))
             let ws = subs
-                     |> Array.map(fun s -> best_w s (p_sat * avg_cost) (p_dissat + p_sat * (1.0 - avg_cost)) )
+                     |> Array.map(fun s -> best_w (s, (p_sat * avg_cost), (p_dissat + p_sat * (1.0 - avg_cost))))
 
             let pk_cost = ws |> Array.fold(fun acc w -> acc + w.pkCost + 1u) (2u + num_cost + e.pkCost)
             let sat_cost = ws |> Array.fold(fun acc w -> acc + w.satCost) e.satCost
@@ -912,7 +913,7 @@ module CompiledNode =
                 satCost=sat_cost * avg_cost + dissat_cost * (1.0 - avg_cost)
                 dissatCost=0.0
             }
-    and best_v (node: CompiledNode) (p_sat: float) (p_dissat: float): Cost =
+    and best_v (node: CompiledNode, p_sat: float, p_dissat: float): Cost =
          match node with
          | Pk k ->
              {
@@ -945,8 +946,8 @@ module CompiledNode =
                  dissatCost=0.0
              }
          | And (l, r) ->
-             let lv = best_v l p_sat 0.0
-             let rv = best_v r p_sat 0.0
+             let lv = best_v (l, p_sat, 0.0)
+             let rv = best_v (r, p_sat, 0.0)
              {
                  ast=VTree(V.And(lv.ast.castVUnsafe(), rv.ast.castVUnsafe()))
                  pkCost=lv.pkCost + rv.pkCost
@@ -954,14 +955,14 @@ module CompiledNode =
                  dissatCost=0.0
              }
          | Or(l, r, lweight, rweight) ->
-             let le_par = best_e l (p_sat * lweight) (p_sat * rweight)
-             let re_par = best_e r (p_sat * rweight) (p_sat * lweight)
-             let lt = best_t l (p_sat * lweight) 0.0
-             let rt = best_t r (p_sat * rweight) 0.0
-             let lv = best_v l (p_sat * lweight) 0.0
-             let rv = best_v r (p_sat * rweight) 0.0
-             let maybelq = best_q l (p_sat * lweight) 0.0
-             let mayberq = best_q r (p_sat * rweight) 0.0
+             let le_par = best_e (l, (p_sat * lweight), (p_sat * rweight))
+             let re_par = best_e (r, (p_sat * rweight), (p_sat * lweight))
+             let lt = best_t (l, (p_sat * lweight), 0.0)
+             let rt = best_t (r, (p_sat * rweight), 0.0)
+             let lv = best_v (l, (p_sat * lweight), 0.0)
+             let rv = best_v (r, (p_sat * rweight), 0.0)
+             let maybelq = best_q (l, (p_sat * lweight), 0.0)
+             let mayberq = best_q (r, (p_sat * rweight), 0.0)
 
              let possibleCases =
                  [|
@@ -1018,9 +1019,9 @@ module CompiledNode =
          | Threshold(n, subs) ->
             let num_cost = scriptNumCost n
             let avg_cost = float n / float subs.Length
-            let e = best_e subs.[0] (p_sat * avg_cost) (p_sat * (1.0 - avg_cost))
+            let e = best_e (subs.[0], (p_sat * avg_cost), (p_sat * (1.0 - avg_cost)))
             let ws = subs
-                     |> Array.map(fun s -> best_w s (p_sat * avg_cost) (p_sat * (1.0 - avg_cost)) )
+                     |> Array.map(fun s -> best_w (s, (p_sat * avg_cost), (p_sat * (1.0 - avg_cost))))
 
             let pk_cost = ws |> Array.fold(fun acc w -> acc + w.pkCost + 1u) (1u + num_cost + e.pkCost)
             let sat_cost = ws |> Array.fold(fun acc w -> acc + w.satCost) e.satCost
@@ -1036,4 +1037,4 @@ module CompiledNode =
 type CompiledNode with
     static member fromPolicy(p: Policy) = CompiledNode.fromPolicy p
     member this.compile() = 
-        CompiledNode.best_t this 1.0 0.0
+        CompiledNode.best_t (this, 1.0, 0.0)
