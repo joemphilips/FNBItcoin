@@ -1,6 +1,7 @@
 namespace FNBitcoin.MiniScript
 
 open FNBitcoin.MiniScriptAST
+open FNBitcoin.MiniScriptDecompiler
 open NBitcoin
 
 /// wrapper for top-level AST
@@ -15,8 +16,11 @@ module MiniScript =
     let toAST (m : MiniScript) =
         match m with
         | MiniScript a -> a
-    
-    let fromScript (s : NBitcoin.Script) = failwith "not implemented!"
+
+    let fromScript (s : NBitcoin.Script) =
+        let token = tokenize s
+        failwith "not impl"
+
     let toScript (m : MiniScript) : Script = failwith "not implemented!"
 
 type MiniScript with
