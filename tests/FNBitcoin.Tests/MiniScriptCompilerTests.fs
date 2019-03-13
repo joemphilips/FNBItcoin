@@ -11,8 +11,8 @@ let logger = Log.create "MiniscriptCompiler"
 
 let config =
     { FsCheckConfig.defaultConfig with arbitrary = [ typeof<Generators> ]
-                                       maxTest = 30
-                                       endSize = 128
+                                       maxTest = 500
+                                       endSize = 32
                                        receivedArgs =
                                            fun _ name no args -> 
                                                logger.debugWithBP 
@@ -35,5 +35,5 @@ let tests =
                                              let m = match CompiledNode.fromPolicy(p).compile() with
                                                      | Ok miniscript -> miniscript
                                                      | Result.Error e -> failwith e
-                                             m.ToScript()
+                                             Expect.isNotNull (m.ToScript()) "script was empty"
                                          ]
