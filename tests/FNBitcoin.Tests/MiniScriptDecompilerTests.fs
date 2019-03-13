@@ -80,14 +80,24 @@ let tests =
                                                                         keysList.[2..3]), 
                                                                    T.Time
                                                                        (10000u)))))
-                                           let policy3_1 = sprintf "OP_2 %s %s OP_2 OP_CHECKMULTISIG" keys.[0] keys.[1]
-                                           let policy3_2 = sprintf "OP_2 %s %s OP_2 OP_CHECKMULTISIGVERIFY" keys.[2] keys.[3]
-                                           let s3 = Script(sprintf "%s OP_IFDUP OP_NOTIF %s 1027 OPNOP3 OP_ENDIF" policy3_1 policy3_2)
-
+                                           let policy3_1 =
+                                               sprintf 
+                                                   "OP_2 %s %s OP_2 OP_CHECKMULTISIG" 
+                                                   keys.[0] keys.[1]
+                                           let policy3_2 =
+                                               sprintf 
+                                                   "OP_2 %s %s OP_2 OP_CHECKMULTISIGVERIFY" 
+                                                   keys.[2] keys.[3]
+                                           let s3 =
+                                               Script
+                                                   (sprintf 
+                                                        "%s OP_IFDUP OP_NOTIF %s 1027 OPNOP3 OP_ENDIF" 
+                                                        policy3_1 policy3_2)
                                            roundtrip r3 s3
-                                           let r4 = MiniScript.fromAST(TTree(T.Time(921u)))
+                                           let r4 =
+                                               MiniScript.fromAST 
+                                                   (TTree(T.Time(921u)))
                                            let s4 = Script("9903 OP_NOP3")
                                            roundtrip r4 s4
-
-                                           // let s5 = MiniScript.fromAST(TTree(T.HashEqual(uint256()))
                                            () ]
+// let s5 = MiniScript.fromAST(TTree(T.HashEqual(uint256()))

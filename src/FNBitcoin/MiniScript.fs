@@ -16,11 +16,11 @@ module MiniScript =
     let toAST (m : MiniScript) =
         match m with
         | MiniScript a -> a
-
+    
     let fromScript (s : NBitcoin.Script) =
         let token = tokenize s
         failwith "not impl"
-
+    
     let toScript (m : MiniScript) : Script = failwith "not implemented!"
 
 type MiniScript with

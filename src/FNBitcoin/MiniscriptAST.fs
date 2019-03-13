@@ -74,6 +74,7 @@ type AST =
     | TTree of T
 
 type E with
+    
     member this.print() =
         match this with
         | CheckSig pk -> sprintf "E.pk(%s)" (pk.ToHex())
@@ -95,80 +96,83 @@ type E with
         | SwitchOrRight(e, f) -> sprintf "E.or_r(%s,%s)" (e.print()) (f.print())
         | Likely f -> sprintf "E.lift_l(%s)" (f.print())
         | Unlikely f -> sprintf "E.lift_u(%s)" (f.print())
-    member this.Serialize(sb: StringBuilder): StringBuilder =
+    
+    member this.Serialize(sb : StringBuilder) : StringBuilder =
         match this with
-        | CheckSig pk ->
-            sb.AppendFormat(" {0} OP_CHECKSIG", pk)
-        | CheckMultiSig(m, pks) ->
+        | CheckSig pk -> sb.AppendFormat(" {0} OP_CHECKSIG", pk)
+        | CheckMultiSig(m, pks) -> 
             sb.AppendFormat(" {0}", m) |> ignore
             for pk in pks do
                 do sb.AppendFormat(" {0}", (pk.ToHex())) |> ignore
             sb
-        | Time t ->
+        | Time t -> 
             sb.AppendFormat(" OP_DUP OP_IF {0:x} OP_CSV OP_DROP OP_ENDIF", t)
-        | Threshold(k, e, ws) ->
+        | Threshold(k, e, ws) -> 
             e.Serialize(sb) |> ignore
             for w in ws do
                 w.Serialize(sb) |> ignore
                 sb.Append(" OP_ADD") |> ignore
             sb.AppendFormat(" {0} OP_EQUAL", k)
-        | ParallelAnd(l, r) ->
+        | ParallelAnd(l, r) -> 
             l.Serialize(sb) |> ignore
             r.Serialize(sb) |> ignore
             sb.Append(" OP_BOOLAND")
-        | CascadeAnd(l, r) ->
+        | CascadeAnd(l, r) -> 
             l.Serialize(sb) |> ignore
-            sb.Append(" OP_NOTIF 0 OP_ELSE")|> ignore
+            sb.Append(" OP_NOTIF 0 OP_ELSE") |> ignore
             r.Serialize(sb) |> ignore
             sb.Append(" OP_ENDIF")
-        | ParallelOr(l, r) ->
-            l.Serialize(sb)|> ignore
-            r.Serialize(sb)|> ignore
+        | ParallelOr(l, r) -> 
+            l.Serialize(sb) |> ignore
+            r.Serialize(sb) |> ignore
             sb.Append(" OP_BOOLOR")
-        | CascadeOr(l, r) ->
-            l.Serialize(sb)|> ignore
+        | CascadeOr(l, r) -> 
+            l.Serialize(sb) |> ignore
             sb.Append(" OP_IFDUP OP_NOTIF") |> ignore
             r.Serialize(sb) |> ignore
             sb.Append(" OP_ENDIF")
-        | SwitchOrLeft(l, r) ->
+        | SwitchOrLeft(l, r) -> 
             sb.Append(" OP_IF") |> ignore
-            l.Serialize(sb)|> ignore
+            l.Serialize(sb) |> ignore
             sb.Append(" OP_ELSE") |> ignore
             r.Serialize(sb) |> ignore
             sb.Append(" OP_ENDIF")
-        | SwitchOrRight(l, r) ->
+        | SwitchOrRight(l, r) -> 
             sb.Append(" OP_NOTIF") |> ignore
-            l.Serialize(sb)|> ignore
+            l.Serialize(sb) |> ignore
             sb.Append(" OP_ELSE") |> ignore
             r.Serialize(sb) |> ignore
             sb.Append(" OP_ENDIF")
-        | Likely(f) ->
+        | Likely(f) -> 
             sb.Append(" OP_NOTIF") |> ignore
             f.Serialize(sb) |> ignore
             sb.Append(" OP_ELSE 0 OP_ENDIF")
-        | Unlikely(f) ->
+        | Unlikely(f) -> 
             sb.Append(" OP_IF") |> ignore
             f.Serialize(sb) |> ignore
             sb.Append(" OP_ELSE 0 OP_ENDIF")
+    
     member this.toE() = this
     member this.toT() =
         match this with
         | ParallelOr(l, r) -> T.ParallelOr(l, r)
         | x -> T.CastE(x)
+
 and Q with
+    
     member this.print() =
         match this with
         | Pubkey p -> sprintf "Q.pk(%s)" (p.ToString())
         | And(v, q) -> sprintf "Q.and(%s,%s)" (v.print()) (q.print())
         | Or(q1, q2) -> sprintf "Q.or(%s,%s)" (q1.print()) (q2.print())
-    member this.Serialize(sb: StringBuilder): StringBuilder =
+    
+    member this.Serialize(sb : StringBuilder) : StringBuilder =
         match this with
-        | Pubkey pk ->
-            sb.AppendFormat(" {0}", (pk.ToHex()))
-        | And(l, r) ->
+        | Pubkey pk -> sb.AppendFormat(" {0}", (pk.ToHex()))
+        | And(l, r) -> 
             l.Serialize(sb) |> ignore
             r.Serialize(sb)
-        | Or(l, r) ->
+        | Or(l, r) -> 
             sb.Append(" OP_IF") |> ignore
             l.Serialize(sb) |> ignore
             sb.Append(" OP_ELSE") |> ignore
@@ -176,30 +180,36 @@ and Q with
             sb.Append(" OP_ENDIF")
 
 and W with
+    
     member this.print() =
         match this with
         | CheckSig pk -> sprintf "W.pk(%s)" (pk.ToString())
         | HashEqual u -> sprintf "W.hash(%s)" (u.ToString())
         | Time t -> sprintf "W.time(%d)" t
         | CastE e -> e.print()
-    member this.Serialize(sb: StringBuilder): StringBuilder =
+    
+    member this.Serialize(sb : StringBuilder) : StringBuilder =
         match this with
-        | CheckSig pk ->
+        | CheckSig pk -> 
             sb.Append(" OP_SWAP") |> ignore
             sb.AppendFormat(" {0}", (pk.ToHex)) |> ignore
             sb.Append(" OP_CHECKSIG")
-        | HashEqual h ->
-            sb.Append(" OP_SWAP OP_SIZE OP_0NOTEQUAL OP_IF OP_SIZE 32 OP_EQUALVERIFY OP_SHA256") |> ignore
+        | HashEqual h -> 
+            sb.Append
+                (" OP_SWAP OP_SIZE OP_0NOTEQUAL OP_IF OP_SIZE 32 OP_EQUALVERIFY OP_SHA256") 
+            |> ignore
             sb.Append(h.ToString()) |> ignore
             sb.Append(" OP_EQUALVERIFY 1 OP_ENDIF")
-        | Time t ->
-            sb.AppendFormat(" OP_SWAP OP_DUP OP_IF {0:x} OP_CSV OP_DROP OP_ENDIF", t)
-        | CastE e ->
+        | Time t -> 
+            sb.AppendFormat
+                (" OP_SWAP OP_DUP OP_IF {0:x} OP_CSV OP_DROP OP_ENDIF", t)
+        | CastE e -> 
             sb.Append(" OP_TOALTSTACK") |> ignore
             e.Serialize(sb) |> ignore
             sb.Append(" OP_FROMALTSTACK")
 
 and F with
+    
     member this.print() =
         match this with
         | CheckSig pk -> sprintf "F.pk(%s)" (pk.ToString())
@@ -219,61 +229,63 @@ and F with
         | SwitchOr(l, r) -> sprintf "F.or_s(%s,%s)" (l.print()) (r.print())
         | SwitchOrV(l, r) -> sprintf "F.or_a(%s,%s)" (l.print()) (r.print())
         | DelayedOr(l, r) -> sprintf "F.or_d(%s,%s)" (l.print()) (r.print())
-
+    
     member this.toE() = this
+    
     member this.toT() =
         match this with
         | CascadeOr(l, r) -> T.CascadeOrV(l, r)
         | SwitchOrV(l, r) -> T.SwitchOrV(l, r)
         | x -> failwith (sprintf "%s is not a T" (x.print()))
-
-    member this.Serialize(sb: StringBuilder): StringBuilder =
+    
+    member this.Serialize(sb : StringBuilder) : StringBuilder =
         match this with
-        | CheckSig pk ->
+        | CheckSig pk -> 
             sb.AppendFormat(" {0} OP_CHECKSIGVERIFY 1", (pk.ToHex()))
-        | CheckMultiSig (m, pks) ->
+        | CheckMultiSig(m, pks) -> 
             sb.AppendFormat(" {0}", m) |> ignore
             for pk in pks do
                 sb.AppendFormat(" {0}", (pk.ToHex())) |> ignore
             sb.AppendFormat(" {0} OP_CHECKMULTISIGVERIFY 1", pks.Length)
-        | Time t ->
-            sb.AppendFormat(" {0} OP_CSV OP_0NOTEQUAL", t)
-        | HashEqual h ->
-            sb.AppendFormat(" OP_SIZE 32 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUALVERIFY 1", h)
-        | Threshold(k, e, ws) ->
+        | Time t -> sb.AppendFormat(" {0} OP_CSV OP_0NOTEQUAL", t)
+        | HashEqual h -> 
+            sb.AppendFormat
+                (" OP_SIZE 32 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUALVERIFY 1", h)
+        | Threshold(k, e, ws) -> 
             e.Serialize(sb) |> ignore
             for w in ws do
                 w.Serialize(sb) |> ignore
                 sb.Append(" OP_ADD") |> ignore
             sb.AppendFormat(" {0} OP_EQUALVERIFY 1", k)
-        | And(l, r) ->
+        | And(l, r) -> 
             l.Serialize(sb) |> ignore
             r.Serialize(sb)
-        | SwitchOr(l, r) ->
-            sb.AppendFormat(" OP_IF")|> ignore
-            l.Serialize(sb)|> ignore
-            sb.Append(" OP_ELSE")|> ignore
-            r.Serialize(sb)|> ignore
+        | SwitchOr(l, r) -> 
+            sb.AppendFormat(" OP_IF") |> ignore
+            l.Serialize(sb) |> ignore
+            sb.Append(" OP_ELSE") |> ignore
+            r.Serialize(sb) |> ignore
             sb.Append(" OP_ENDIF")
-        | SwitchOrV(l, r) ->
-            sb.AppendFormat(" OP_IF")|> ignore
-            l.Serialize(sb)|> ignore
-            sb.Append(" OP_ELSE")|> ignore
-            r.Serialize(sb)|> ignore
+        | SwitchOrV(l, r) -> 
+            sb.AppendFormat(" OP_IF") |> ignore
+            l.Serialize(sb) |> ignore
+            sb.Append(" OP_ELSE") |> ignore
+            r.Serialize(sb) |> ignore
             sb.Append(" OP_ENDIF 1")
-        | CascadeOr(l, r) ->
-            l.Serialize(sb)|> ignore
-            sb.Append(" OP_NOTIF")|> ignore
-            r.Serialize(sb)|> ignore
+        | CascadeOr(l, r) -> 
+            l.Serialize(sb) |> ignore
+            sb.Append(" OP_NOTIF") |> ignore
+            r.Serialize(sb) |> ignore
             sb.Append(" OP_ENDIF 1")
-        | DelayedOr(l, r) ->
-            sb.Append(" OP_IF")|> ignore
-            l.Serialize(sb)|> ignore
-            sb.Append(" OP_ELSE")|> ignore
-            r.Serialize(sb)|> ignore
+        | DelayedOr(l, r) -> 
+            sb.Append(" OP_IF") |> ignore
+            l.Serialize(sb) |> ignore
+            sb.Append(" OP_ELSE") |> ignore
+            r.Serialize(sb) |> ignore
             sb.Append(" OP_ENDIF OP_CHECKSIGVERIFY 1")
 
 and V with
+    
     member this.print() =
         match this with
         | CheckSig pk -> sprintf "V.pk(%s)" (pk.ToString())
@@ -293,53 +305,55 @@ and V with
         | SwitchOr(l, r) -> sprintf "V.or_s(%s,%s)" (l.print()) (r.print())
         | SwitchOrT(l, r) -> sprintf "V.or_a(%s,%s)" (l.print()) (r.print())
         | DelayedOr(l, r) -> sprintf "V.or_d(%s,%s)" (l.print()) (r.print())
-    member this.Serialize(sb: StringBuilder): StringBuilder =
+    
+    member this.Serialize(sb : StringBuilder) : StringBuilder =
         match this with
-        | CheckSig pk ->
+        | CheckSig pk -> 
             sb.AppendFormat(" {0} OP_CHECKSIGVERIFY ", (pk.ToHex()))
-        | CheckMultiSig(m, pks) ->
+        | CheckMultiSig(m, pks) -> 
             sb.AppendFormat(" {0}", m) |> ignore
             for pk in pks do
                 sb.AppendFormat(" {0}", (pk.ToHex())) |> ignore
             sb.AppendFormat(" {0} OP_CHECKMULTISIGVERIFY 1", pks.Length)
-        | Time t ->
-            sb.AppendFormat(" {0} OP_CSV OP_DROP", t)
-        | HashEqual h ->
-            sb.AppendFormat(" OP_SIZE 32 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUALVERIFY 1", h)
-        | Threshold(k, e, ws) ->
+        | Time t -> sb.AppendFormat(" {0} OP_CSV OP_DROP", t)
+        | HashEqual h -> 
+            sb.AppendFormat
+                (" OP_SIZE 32 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUALVERIFY 1", h)
+        | Threshold(k, e, ws) -> 
             e.Serialize(sb) |> ignore
             for w in ws do
                 w.Serialize(sb) |> ignore
                 sb.Append(" OP_ADD") |> ignore
             sb.AppendFormat(" {0} OP_EQUALVERIFY", k)
-        | And(l, r) ->
+        | And(l, r) -> 
             l.Serialize(sb) |> ignore
             r.Serialize(sb)
-        | SwitchOr(l, r) ->
-            sb.AppendFormat(" OP_IF")|> ignore
-            l.Serialize(sb)|> ignore
-            sb.Append(" OP_ELSE")|> ignore
-            r.Serialize(sb)|> ignore
+        | SwitchOr(l, r) -> 
+            sb.AppendFormat(" OP_IF") |> ignore
+            l.Serialize(sb) |> ignore
+            sb.Append(" OP_ELSE") |> ignore
+            r.Serialize(sb) |> ignore
             sb.Append(" OP_ENDIF")
-        | SwitchOrT(l, r) ->
-            sb.AppendFormat(" OP_IF")|> ignore
-            l.Serialize(sb)|> ignore
-            sb.Append(" OP_ELSE")|> ignore
-            r.Serialize(sb)|> ignore
+        | SwitchOrT(l, r) -> 
+            sb.AppendFormat(" OP_IF") |> ignore
+            l.Serialize(sb) |> ignore
+            sb.Append(" OP_ELSE") |> ignore
+            r.Serialize(sb) |> ignore
             sb.Append(" OP_ENDIF OP_VERIFY")
-        | CascadeOr(l, r) ->
-            l.Serialize(sb)|> ignore
-            sb.Append(" OP_NOTIF")|> ignore
-            r.Serialize(sb)|> ignore
+        | CascadeOr(l, r) -> 
+            l.Serialize(sb) |> ignore
+            sb.Append(" OP_NOTIF") |> ignore
+            r.Serialize(sb) |> ignore
             sb.Append(" OP_ENDIF")
-        | DelayedOr(l, r) ->
-            sb.Append(" OP_IF")|> ignore
-            l.Serialize(sb)|> ignore
-            sb.Append(" OP_ELSE")|> ignore
-            r.Serialize(sb)|> ignore
+        | DelayedOr(l, r) -> 
+            sb.Append(" OP_IF") |> ignore
+            l.Serialize(sb) |> ignore
+            sb.Append(" OP_ELSE") |> ignore
+            r.Serialize(sb) |> ignore
             sb.Append(" OP_ENDIF OP_CHECKSIGVERIFY")
 
 and T with
+    
     member this.print() =
         match this with
         | Time t -> sprintf "T.time(%d)" t
@@ -352,46 +366,47 @@ and T with
         | SwitchOrV(l, r) -> sprintf "T.or_a(%s,%s)" (l.print()) (r.print())
         | DelayedOr(l, r) -> sprintf "T.or_d(%s,%s)" (l.print()) (r.print())
         | CastE e -> sprintf "T.%s" (e.print())
-    member this.Serialize(sb: StringBuilder): StringBuilder =
+    
+    member this.Serialize(sb : StringBuilder) : StringBuilder =
         match this with
-        | Time t ->
-            sb.AppendFormat(" {0} OP_CSV", t)
-        | HashEqual h ->
-            sb.AppendFormat(" OP_SIZE 32 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUAL", h)
-        | And(l, r) ->
+        | Time t -> sb.AppendFormat(" {0} OP_CSV", t)
+        | HashEqual h -> 
+            sb.AppendFormat
+                (" OP_SIZE 32 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUAL", h)
+        | And(l, r) -> 
             l.Serialize(sb) |> ignore
             r.Serialize(sb)
-        | ParallelOr(l, r) ->
-            l.Serialize(sb)|> ignore
-            r.Serialize(sb)|> ignore
+        | ParallelOr(l, r) -> 
+            l.Serialize(sb) |> ignore
+            r.Serialize(sb) |> ignore
             sb.Append(" OP_BOOLOR")
-        | CascadeOr(l, r) ->
-            l.Serialize(sb)|> ignore
-            sb.Append(" OP_IFDUP OP_NOTIF")|> ignore
-            r.Serialize(sb)|> ignore
+        | CascadeOr(l, r) -> 
+            l.Serialize(sb) |> ignore
+            sb.Append(" OP_IFDUP OP_NOTIF") |> ignore
+            r.Serialize(sb) |> ignore
             sb.Append(" OP_ENDIF")
-        | CascadeOrV(l, r) ->
-            l.Serialize(sb)|> ignore
-            sb.Append(" OP_NOTIF")|> ignore
-            r.Serialize(sb)|> ignore
+        | CascadeOrV(l, r) -> 
+            l.Serialize(sb) |> ignore
+            sb.Append(" OP_NOTIF") |> ignore
+            r.Serialize(sb) |> ignore
             sb.Append(" OP_ENDIF 1")
-        | SwitchOr(l, r) ->
-            sb.AppendFormat(" OP_IF")|> ignore
-            l.Serialize(sb)|> ignore
-            sb.Append(" OP_ELSE")|> ignore
-            r.Serialize(sb)|> ignore
+        | SwitchOr(l, r) -> 
+            sb.AppendFormat(" OP_IF") |> ignore
+            l.Serialize(sb) |> ignore
+            sb.Append(" OP_ELSE") |> ignore
+            r.Serialize(sb) |> ignore
             sb.Append(" OP_ENDIF")
-        | SwitchOrV(l, r) ->
-            sb.AppendFormat(" OP_IF")|> ignore
-            l.Serialize(sb)|> ignore
-            sb.Append(" OP_ELSE")|> ignore
-            r.Serialize(sb)|> ignore
+        | SwitchOrV(l, r) -> 
+            sb.AppendFormat(" OP_IF") |> ignore
+            l.Serialize(sb) |> ignore
+            sb.Append(" OP_ELSE") |> ignore
+            r.Serialize(sb) |> ignore
             sb.Append(" OP_ENDIF 1")
-        | DelayedOr(l, r) ->
-            sb.Append(" OP_IF")|> ignore
-            l.Serialize(sb)|> ignore
-            sb.Append(" OP_ELSE")|> ignore
-            r.Serialize(sb)|> ignore
+        | DelayedOr(l, r) -> 
+            sb.Append(" OP_IF") |> ignore
+            l.Serialize(sb) |> ignore
+            sb.Append(" OP_ELSE") |> ignore
+            r.Serialize(sb) |> ignore
             sb.Append(" OP_ENDIF OP_CHECKSIG")
         | CastE e -> e.Serialize(sb)
 
@@ -405,29 +420,29 @@ type AST with
         | FTree f -> f.print()
         | VTree v -> v.print()
         | TTree t -> t.print()
-
+    
     member this.ToScript() =
         let sb = StringBuilder()
         match this with
-        | ETree e ->
+        | ETree e -> 
             let s = e.Serialize(sb)
             NBitcoin.Script(s.ToString())
-        | QTree q ->
+        | QTree q -> 
             let s = q.Serialize(sb)
             NBitcoin.Script(s.ToString())
-        | WTree w ->
+        | WTree w -> 
             let s = w.Serialize(sb)
             NBitcoin.Script(s.ToString())
-        | FTree f ->
+        | FTree f -> 
             let s = f.Serialize(sb)
             NBitcoin.Script(s.ToString())
-        | VTree v ->
+        | VTree v -> 
             let s = v.Serialize(sb)
             NBitcoin.Script(s.ToString())
-        | TTree t ->
+        | TTree t -> 
             let s = t.Serialize(sb)
             NBitcoin.Script(s.ToString())
-
+    
     member this.castT() : Result<T, string> =
         match this with
         | TTree t -> Ok t

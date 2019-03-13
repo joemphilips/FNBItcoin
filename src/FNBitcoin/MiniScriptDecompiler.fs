@@ -122,14 +122,13 @@ let tokenize (script : Script) : Result<Token list, ParseException> =
     let ops = script.ToOps() |> Seq.map castOpToToken
     (Ok Seq.empty, ops)
     ||> Seq.fold resultFolder
-    |> Result.map(fun ts -> Seq.toList ts) // we have to collect the elements since parser requires
+    |> Result.map (fun ts -> Seq.toList ts) // we have to collect the elements since parser requires
 
-
-let rec parseToken (index: int) (ts: Token list): Result<AST, ParseException> =
+let rec parseToken (index : int) (ts : Token list) : Result<AST, ParseException> =
     failwith ""
-    // if ts.Length <= index  then Ok acc
-    // else 
-        // match ts.[index] with
 
-let parse script: Result<AST, ParseException> =
-    tokenize script |> Result.bind(parseToken 0)
+// if ts.Length <= index  then Ok acc
+// else 
+// match ts.[index] with
+let parse script : Result<AST, ParseException> =
+    tokenize script |> Result.bind (parseToken 0)

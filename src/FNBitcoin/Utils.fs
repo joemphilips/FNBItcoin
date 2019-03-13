@@ -1,7 +1,6 @@
 module FNBitcoin.Utils
 
 open System.Collections.Generic
-
 (*
 type Utils =
     let dict = Dictionary<_, _>()
