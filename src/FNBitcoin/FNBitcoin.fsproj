@@ -14,9 +14,9 @@
     <Compile Include="Utils.fs" />
     <Compile Include="MiniscriptAST.fs" />
     <Compile Include="MiniScriptParser.fs" />
-    <Compile Include="MiniScriptCompiler.fs" />
     <Compile Include="MiniScriptDecompiler.fs" />
     <Compile Include="MiniScript.fs" />
+    <Compile Include="MiniScriptCompiler.fs" />
     <Compile Include="Satoshi.fs" />
     <Compile Include="Contract.fs" />
     <Compile Include="Library.fs" />

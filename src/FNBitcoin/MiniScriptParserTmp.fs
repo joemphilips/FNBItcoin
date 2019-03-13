@@ -11,11 +11,8 @@ let matchToken pattern s =
     if res.Success then (res.Groups.[1].Value, res.Groups.[2].Value) |> Some
     else None
 
-let (|WS|_|) s =
-    matchToken "[ |\t|\n|\r\n]+" s
-
-let (|COMMENT|_|) s =
-    matchToken "#.*[\n|\r\n]" s
+let (|WS|_|) s = matchToken "[ |\t|\n|\r\n]+" s
+let (|COMMENT|_|) s = matchToken "#.*[\n|\r\n]" s
 
 let (|WHITESPACE|_|) s =
     match s with
@@ -57,7 +54,6 @@ type Expr =
     | Hash256 of uint256
     | PubKey of byte []
 
-let (|NUMBER|_|) s =
-    "[0-9]+\.?[0-9]"
-    |> MatchToken
-    <| s
+let (|NUMBER|_|) s = "[0-9]+\.?[0-9]"
+                     |> MatchToken
+                     <| s

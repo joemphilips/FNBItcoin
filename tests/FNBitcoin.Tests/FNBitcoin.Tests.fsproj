@@ -15,6 +15,7 @@
     <Compile Include="Contract.fs" />
     <Compile Include="MiniScriptParserTests.fs" />
     <Compile Include="MiniScriptCompilerTests.fs" />
+    <Compile Include="MiniScriptDecompilerTests.fs" />
     <Compile Include="Tests.fs" />
     <Compile Include="Main.fs" />
   </ItemGroup>

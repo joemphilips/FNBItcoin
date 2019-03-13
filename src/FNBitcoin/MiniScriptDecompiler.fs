@@ -1,7 +1,7 @@
 module FNBitcoin.MiniScriptDecompiler
+
 open NBitcoin
 open System
-open System.Collections.Generic
 
 /// Subset of Bitcoin Script which is used in Miniscript
 type Token =
@@ -36,11 +36,11 @@ type Token =
     | Sha256Hash of uint256
     | Pk of NBitcoin.PubKey
 
-type ParseException(msg, ex: exn) =
+type ParseException(msg, ex : exn) =
     inherit Exception(msg, ex)
-    new (msg) = ParseException(msg, null)
+    new(msg) = ParseException(msg, null)
 
-let private castOpToToken (op: Op): Result<Token, ParseException> =
+let private castOpToToken (op : Op) : Result<Token, ParseException> =
     match (op.Code) with
     | OpcodeType.OP_BOOLAND -> Ok(Token.BoolAnd)
     | OpcodeType.OP_BOOLOR -> Ok(Token.BoolOr)
@@ -67,26 +67,24 @@ let private castOpToToken (op: Op): Result<Token, ParseException> =
     | OpcodeType.OP_VERIFY -> Ok(Token.Verify)
     | OpcodeType.OP_HASH160 -> Ok(Token.Hash160)
     | OpcodeType.OP_SHA256 -> Ok(Token.Sha256)
-    | OpcodeType.OP_PUSHDATA1
-    | OpcodeType.OP_PUSHDATA2
-    | OpcodeType.OP_PUSHDATA4 ->
+    | OpcodeType.OP_PUSHDATA1 | OpcodeType.OP_PUSHDATA2 | OpcodeType.OP_PUSHDATA4 -> 
         let size = op.PushData.Length
         match size with
-        | 20 -> Ok(Token.Hash160Hash (uint160(op.PushData)))
-        | 32 -> Ok(Token.Sha256Hash (uint256(op.PushData)))
-        | 33 ->
+        | 20 -> Ok(Token.Hash160Hash(uint160 (op.PushData)))
+        | 32 -> Ok(Token.Sha256Hash(uint256 (op.PushData)))
+        | 33 -> 
             try 
                 Ok(Pk(NBitcoin.PubKey(op.PushData)))
-            with
-            | :? FormatException as ex -> Error(ParseException("Invalid Public Key", ex))
-        | _ ->
+            with :? FormatException as ex -> 
+                Error(ParseException("Invalid Public Key", ex))
+        | _ -> 
             match op.GetInt().HasValue with
-            | true ->
+            | true -> 
                 let v = op.GetInt().Value
                 /// no need to check v >= 0 since it is checked in NBitcoin side
                 Ok(Token.Number(uint32 v))
-            | false ->
-                Error(ParseException(sprintf "Invalid push for %O" op))
+            | false -> 
+                Error(ParseException(sprintf "Invalid push with Opcode %O" op))
     | OpcodeType.OP_0 -> Ok(Token.Number 0u)
     | OpcodeType.OP_1 -> Ok(Token.Number 1u)
     | OpcodeType.OP_2 -> Ok(Token.Number 2u)
@@ -104,15 +102,21 @@ let private castOpToToken (op: Op): Result<Token, ParseException> =
     | OpcodeType.OP_14 -> Ok(Token.Number 14u)
     | OpcodeType.OP_15 -> Ok(Token.Number 15u)
     | OpcodeType.OP_16 -> Ok(Token.Number 16u)
-    | unknown -> Error(ParseException(sprintf "Unknown Opcode %s" (unknown.ToString())))
+    | unknown -> 
+        Error(ParseException(sprintf "Unknown Opcode %s" (unknown.ToString())))
 
-let private resultFolder (acc: Result<'a seq, ParseException>) (item: Result<'a, 'c>) =
+let private resultFolder (acc : Result<'a seq, ParseException>) 
+    (item : Result<'a, 'c>) =
     match acc, item with
-    | Ok x, Ok y -> Ok( seq {yield! x; yield y})
+    | Ok x, Ok y -> 
+        Ok(seq { 
+               yield! x
+               yield y
+           })
     | Error x, Ok y -> Error x
     | Ok x, Error y -> Error y
-    | Error x, Error y -> Error (ParseException((y.ToString()), x))
+    | Error x, Error y -> Error(ParseException((y.ToString()), x))
 
-let tokenize(script: Script): Result<Token seq, ParseException> =
+let tokenize (script : Script) : Result<Token seq, ParseException> =
     let ops = script.ToOps() |> Seq.map castOpToToken
     (Ok Seq.empty, ops) ||> Seq.fold resultFolder

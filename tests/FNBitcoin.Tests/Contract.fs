@@ -1,9 +1,9 @@
 module ContractTests
+
 open Expecto
 open FNBitcoin.Contract
 open FsCheck
 open NBitcoin
-
 (*
 [<Tests>]
 let contractTests =

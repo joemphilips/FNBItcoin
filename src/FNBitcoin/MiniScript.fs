@@ -1,14 +1,24 @@
 namespace FNBitcoin.MiniScript
-open MiniscriptAST
+
+open FNBitcoin.MiniScriptAST
+open NBitcoin
 
 /// wrapper for top-level AST
 type MiniScript = MiniScript of AST
 
 module MiniScript =
-    let create (t: AST): Result<MiniScript, string> =
+    let fromAST (t : AST) : Result<MiniScript, string> =
         match t with
-        | TTree t -> Ok (MiniScript (TTree t))
-        | _ -> Error "AST was not top-level (T) representation" 
+        | TTree t -> Ok(MiniScript(TTree t))
+        | _ -> Error "AST was not top-level (T) representation"
+    
+    let toAST (m : MiniScript) =
+        match m with
+        | MiniScript a -> a
+    
+    let fromScript (s : NBitcoin.Script) = failwith "not implemented!"
+    let toScript (m : MiniScript) : Script = failwith "not implemented!"
 
-    let fromScript (s: NBitcoin.Script) =
-           failwith "not implemented!"
+type MiniScript with
+    member this.ToScript() = MiniScript.toScript this
+    member this.ToAST() = MiniScript.toAST this
