@@ -20,8 +20,10 @@ module MiniScript =
     let fromScript (s : NBitcoin.Script) =
         let token = tokenize s
         failwith "not impl"
-    
-    let toScript (m : MiniScript) : Script = failwith "not implemented!"
+
+    let toScript (m : MiniScript) : Script =
+        let ast = toAST m
+        ast.ToScript()
 
 type MiniScript with
     member this.ToScript() = MiniScript.toScript this

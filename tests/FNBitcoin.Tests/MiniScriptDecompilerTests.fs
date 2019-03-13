@@ -12,7 +12,7 @@ let logger = Log.create "MiniscriptDeCompiler"
 
 [<Tests>]
 let tests =
-    testList "Miniscript Decompiler" [ testCase 
+    ptestList "Miniscript Decompiler" [ testCase 
                                            "Should pass the testcase in rust-miniscript" <| fun _ -> 
                                            let keys =
                                                [ "028c28a97bf8298bc0d23d8c749452a32e694b65e30a9472a3954ab30fe5324caa"; 
