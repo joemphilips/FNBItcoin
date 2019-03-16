@@ -2,8 +2,14 @@ module FNBitcoin.MiniScriptAST
 
 open NBitcoin
 open System.Text
+open FNBitcoin.MiniScriptParser
+open FNBitcoin.Utils
 
 // TODO: Use unativeint instead of uint
+
+/// "E"xpression. takes more than one inputs from the stack, if it satisfies the condition,
+/// It will leave 1 onto the stack, otherwise leave 0
+/// E and W are the only type which is able to dissatisfy without failing the whole script.
 type E =
     | CheckSig of PubKey
     | CheckMultiSig of uint32 * PubKey []
@@ -18,17 +24,23 @@ type E =
     | Likely of F
     | Unlikely of F
 
-and Q =
-    | Pubkey of PubKey
-    | And of (V * Q)
-    | Or of (Q * Q)
-
+/// "W"rapped. say top level element is `X`, then consume items from the next element.
+/// and leave one of [1,X] [X,1] if it satisfied the condition. otherwise
+/// leave [0,X] or [X,0] onto the stack.
 and W =
     | CheckSig of PubKey
     | HashEqual of uint256
     | Time of uint32
     | CastE of E
 
+/// "Q"ueue. Similar to F, but leaves public key buffer on the stack instead of 1
+and Q =
+    | Pubkey of PubKey
+    | And of (V * Q)
+    | Or of (Q * Q)
+
+
+/// "F"orced. Similar to T, but always leaves 1 on the stack.
 and F =
     | CheckSig of PubKey
     | CheckMultiSig of uint32 * PubKey []
@@ -41,6 +53,7 @@ and F =
     | SwitchOrV of (V * V)
     | DelayedOr of (Q * Q)
 
+/// "V"erify. Similar to the T, but does not leave anything on the stack
 and V =
     | CheckSig of PubKey
     | CheckMultiSig of uint32 * PubKey []
@@ -53,6 +66,7 @@ and V =
     | SwitchOrT of (T * T)
     | DelayedOr of (Q * Q)
 
+/// "T"opLevel representation. Must be satisfied, and leave zero (or non-zero) value onto the stack
 and T =
     | Time of uint32
     | HashEqual of uint256
@@ -72,6 +86,22 @@ type AST =
     | FTree of F
     | VTree of V
     | TTree of T
+
+type ASTType =
+    | Nested of ASTType * ASTType
+    | EExpr
+    | QExpr
+    | WExpr
+    | FExpr
+    | VExpr
+    | TExpr
+
+ let (|E|_|) (s: Op[]) =
+     match s.[0].ToString() with
+     | PubKeyPattern pk when s.[1] = (!> OpcodeType.OP_CHECKSIG) ->
+        Some(E.CheckSig pk)
+     | _ -> None
+
 
 type E with
     
@@ -106,7 +136,7 @@ type E with
                 do sb.AppendFormat(" {0}", (pk.ToHex())) |> ignore
             sb
         | Time t -> 
-            sb.AppendFormat(" OP_DUP OP_IF {0:x} OP_CSV OP_DROP OP_ENDIF", t)
+            sb.AppendFormat(" OP_DUP OP_IF {0} OP_CSV OP_DROP OP_ENDIF", t)
         | Threshold(k, e, ws) -> 
             e.Serialize(sb) |> ignore
             for w in ws do
@@ -192,17 +222,17 @@ and W with
         match this with
         | CheckSig pk -> 
             sb.Append(" OP_SWAP") |> ignore
-            sb.AppendFormat(" {0}", (pk.ToHex)) |> ignore
+            sb.AppendFormat(" {0}", (pk.ToHex())) |> ignore
             sb.Append(" OP_CHECKSIG")
         | HashEqual h -> 
             sb.Append
                 (" OP_SWAP OP_SIZE OP_0NOTEQUAL OP_IF OP_SIZE 32 OP_EQUALVERIFY OP_SHA256") 
             |> ignore
-            sb.Append(h.ToString()) |> ignore
+            sb.AppendFormat(" {0}", h.ToString()) |> ignore
             sb.Append(" OP_EQUALVERIFY 1 OP_ENDIF")
         | Time t -> 
             sb.AppendFormat
-                (" OP_SWAP OP_DUP OP_IF {0:x} OP_CSV OP_DROP OP_ENDIF", t)
+                (" OP_SWAP OP_DUP OP_IF {0} OP_CSV OP_DROP OP_ENDIF", t)
         | CastE e -> 
             sb.Append(" OP_TOALTSTACK") |> ignore
             e.Serialize(sb) |> ignore
@@ -441,7 +471,8 @@ type AST with
             NBitcoin.Script(s.ToString())
         | TTree t -> 
             let s = t.Serialize(sb)
-            NBitcoin.Script(s.ToString())
+            let str = s.ToString()
+            NBitcoin.Script(str)
     
     member this.castT() : Result<T, string> =
         match this with
