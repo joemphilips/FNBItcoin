@@ -11,7 +11,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssemblyInfo.fs" />
-    <Compile Include="Utils.fs" />
+    <Compile Include="Utils/Parser.fs" />
+    <Compile Include="Utils/Lib.fs" />
     <Compile Include="MiniScriptParser.fs" />
     <Compile Include="MiniscriptAST.fs" />
     <Compile Include="MiniScriptDecompiler.fs" />
