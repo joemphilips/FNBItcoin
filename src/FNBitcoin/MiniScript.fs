@@ -16,10 +16,12 @@ module MiniScript =
     let toAST (m : MiniScript) =
         match m with
         | MiniScript a -> a
-    
-    let fromScript (s : NBitcoin.Script) =
-        let token = tokenize s
-        failwith "not impl"
+
+    let fromScriptUnsafe (s : NBitcoin.Script) =
+        let res = parseScriptUnsafe s
+        match fromAST res with
+        | Ok r -> r
+        | Error e -> failwith e
 
     let toScript (m : MiniScript) : Script =
         let ast = toAST m

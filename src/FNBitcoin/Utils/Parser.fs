@@ -7,6 +7,10 @@ module Parser =
 
     type ParserError = ParserName * ErrorMessage * Position
 
+    let printParserError (pe: ParserError) =
+        let (name, msg, pos) = pe
+        sprintf "name: %s\nmsg: %s\nposition %d" name msg pos
+
     type ParserResult<'a> = Result<'a, ParserError>
 
     type Parser<'a, 'u> = {

@@ -88,7 +88,6 @@ type AST =
     | TTree of T
 
 type ASTType =
-    | Nested of ASTType * ASTType
     | EExpr
     | QExpr
     | WExpr
@@ -473,7 +472,15 @@ type AST with
             let s = t.Serialize(sb)
             let str = s.ToString()
             NBitcoin.Script(str)
-    
+    member this.GetASTType() =
+        match this with
+        | ETree _ -> EExpr
+        | QTree _ -> QExpr
+        | WTree _ -> WExpr
+        | FTree _ -> FExpr
+        | VTree _ -> VExpr
+        | TTree _ -> TExpr
+
     member this.castT() : Result<T, string> =
         match this with
         | TTree t -> Ok t

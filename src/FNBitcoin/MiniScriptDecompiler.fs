@@ -264,6 +264,83 @@ module TokenParser =
     let mutable pE, pEImpl = createParserForwardedToRef<AST, State>()
     let mutable pV, pVImpl = createParserForwardedToRef<AST, State>()
     let mutable pQ, pQImpl = createParserForwardedToRef<AST, State>()
+    let mutable pT, pTImpl = createParserForwardedToRef<AST, State>()
+    let mutable pF, pFImpl = createParserForwardedToRef<AST, State>()
+
+    // ---- common helpers ----
+    let private pTime1 = (pToken EndIf)
+                         >>. (pToken (Drop))
+                         >>. (pToken (CheckSequenceVerify))
+                         >>. (pToken Number)
+                         .>> (pToken If) .>> (pToken Dup)
+
+    // TODO: restrict to only specific number
+    let private pNumberN n =
+        let numberValidateParser (maybeNumberObj: obj option) =
+            let name = sprintf "number validator %d" n
+            let innerFn state =
+                let actual = maybeNumberObj.Value :?> uint32
+                if actual = n then
+                    Ok(n, state)
+                else
+                    let msg = sprintf "failed in number validation\nexpected: %d\nactual: %d" n actual
+                    Error(name, msg, state.position)
+
+            {parseFn=innerFn;name=name}
+        (pToken Number) >>= numberValidateParser
+
+    let private multisigBind (expectedType: ASTType) (nAndPks: obj option * obj option list, maybeMObj: obj option) =
+        let n = (fst nAndPks).Value :?> int32
+        let pks = (snd nAndPks)
+                  |> List.toArray
+                  |> Array.map(fun pkobj -> pkobj.Value :?> PubKey)
+        let m = maybeMObj.Value :?> uint32
+        let name = sprintf "Parser for Multisig of type %A" expectedType
+        let innerFn (state: State) =
+            if pks.Length = n then
+                match expectedType with
+                | EExpr -> Ok(ETree(E.CheckMultiSig(m, pks)), state)
+                | VExpr -> Ok(VTree(V.CheckMultiSig(m, pks)), state)
+                | _ -> failwith "unreachable!"
+            else
+                let msg = (sprintf "Invalid Multisig Script n was %d but actual pubkey length was %d" n pks.Length)
+                Error(name, msg, state.position)
+
+        {parseFn=innerFn; name=name}
+
+
+    // ---- W ---------
+    let pWCheckSig = (pToken CheckSig)
+                     >>. (pToken Pk) .>> (pToken Swap)
+                     |>> fun maybePKObj -> WTree(W.CheckSig (maybePKObj.Value :?> NBitcoin.PubKey))
+                     <?> "Parser W.Checksig"
+
+    let pWTime = (pTime1
+                 .>> (pToken Swap)
+                 |>> fun o -> WTree(W.Time(o.Value :?> uint32)))
+                 <?> "Parser W.Time"
+
+    let pWCastE = (pToken FromAltStack)
+                  >>. (pE) .>> (pToken ToAltStack)
+                  |>> fun expr ->
+                      WTree(W.CastE(expr.castEUnsafe()))
+
+    let pWHashEqual = (pToken EndIf >>. pF .>> pToken If .>> pToken ZeroNotEqual .>> pToken Size .>> pToken Swap)
+                      >>=(
+                          fun ast ->
+                              let name = "pWHashEqualValidator"
+                              let innerFn state =
+                                  match ast.castF() with
+                                  | Ok fexpr ->
+                                      match fexpr with
+                                      | F.HashEqual hash ->
+                                          Ok(WTree(W.HashEqual(hash)), state)
+                                      | e ->
+                                          let msg =  sprintf "unexpected expr\nexpected: F.HashEqual\nactual: %A" e
+                                          Error(name, msg, state.position)
+                                  | Error e -> failwith "unreachable"
+                              {parseFn=innerFn; name=name}
+                      )
 
     // ---- E ---------
     let pEParallelAnd = ((pToken BoolAnd)
@@ -272,49 +349,251 @@ module TokenParser =
                             ETree(E.ParallelAnd(astE.castEUnsafe(), astW.castWUnsafe())))
                          <?> "Parser E.ParallelAnd"
 
+    let pEParallelOr = ((pToken BoolOr)
+                        >>. pW .>>. pE
+                        |>> fun (astW, astE) ->
+                            ETree(E.ParallelOr(astE.castEUnsafe(), astW.castWUnsafe())))
+                         <?> "Parser E.ParallelAnd"
+
+    let pEThreshold = (((pToken Equal) >>. (pToken Number))
+                      .>>. (many1 (pToken Add >>. pW))
+                      .>>. (pToken Any >>. pE)
+                      |>> fun (kws, east) ->
+                        let k = (fst kws).Value :?> uint32
+                        let e = east.castEUnsafe()
+                        let ws = (snd kws) |> List.toArray |> Array.map(fun ast -> ast.castWUnsafe())
+                        ETree(E.Threshold(k, e, ws))
+                      ) <?> "Parser E.Threshold"
+
     let pECheckSig = (pToken CheckSig)
                      >>. (pToken Pk)
                      |>> fun maybePKObj -> ETree(E.CheckSig (maybePKObj.Value :?> NBitcoin.PubKey))
                      <?> "Parser E.Checksig"
 
-    // ---- W ---------
-    let pWCheckSig = (pToken CheckSig)
-                     >>. (pToken Pk) .>> (pToken Swap)
-                     |>> fun maybePKObj -> WTree(W.CheckSig (maybePKObj.Value :?> NBitcoin.PubKey))
-                     <?> "Parser W.Checksig"
+    let pECheckMultisig = (pToken CheckMultiSig) >>. (pToken Number)
+                          .>>. (many1 (pToken Pk))
+                          .>>. (pToken Number)
+                          >>= multisigBind EExpr
 
-    let pTime1 = (pToken EndIf)
-                 >>. (pToken (Drop))
-                 >>. (pToken (CheckSequenceVerify))
-                 >>. (pToken Number)
-                 .>> (pToken If) .>> (pToken Dup)
+    let pETime = pWTime
+                 <|> (pTime1 |>> fun maybeNumberObj -> ETree(E.Time(maybeNumberObj.Value :?> uint32)))
 
-    let pWTime = (pTime1
-                 .>> (pToken Swap)
-                 |>> fun o -> WTree(W.Time(o.Value :?> uint32)))
-                 <?> "Parser pWTime"
+
+    let private pLikelyPrefix = (pToken EndIf) >>. pNumberN(0u) >>. pToken Else >>. pF
+
+    let pEUnlikely = pLikelyPrefix
+                    .>> pToken If
+                    |>> fun (fexpr) -> ETree(E.Unlikely(fexpr.castFUnsafe()))
+
+    let pELikely = pLikelyPrefix
+                   .>> pToken If
+                   |>> fun (fexpr) -> ETree(E.Likely(fexpr.castFUnsafe()))
+
+    let pECascadeAnd = (pToken EndIf) >>. pF .>> pToken Else
+                       .>>. ((pNumberN 0u) >>. (pToken NotIf) >>. pE)
+                       |>> fun (rightF, leftE) ->
+                           ETree(E.CascadeAnd(leftE.castEUnsafe(), rightF.castFUnsafe()))
+
+    let pESwitchOrLeft = ((pToken EndIf) >>. pF .>> pToken Else)
+                         .>>. ((pE) .>> pToken If)
+                         |>> fun (rightF, leftE) ->
+                             ETree(E.SwitchOrLeft(leftE.castEUnsafe(), rightF.castFUnsafe()))
+
+    let pESwitchOrRight = ((pToken EndIf) >>. pF .>> pToken Else)
+                          .>>. ((pE) .>> pToken NotIf)
+                          |>> fun (rightF, leftE) ->
+                              ETree(E.SwitchOrRight(leftE.castEUnsafe(), rightF.castFUnsafe()))
 
     // ---- V -------
-    let pVDelayedOr = ((pToken CheckSigVerify)
+    let pVDelayedOr = (((pToken CheckSigVerify)
                       >>. (pToken EndIf) >>. pQ) .>>. (pToken Else >>. pQ .>> pToken If)
-                      |>> fun (q1, q2) -> VTree(V.DelayedOr(q2.castQUnsafe(), q1.castQUnsafe()))
+                      |>> fun (q1, q2) -> 
+                          printfn "finished pVDelaydOr with %A %A" q2 q1
+                          VTree(V.DelayedOr(q2.castQUnsafe(), q1.castQUnsafe()))
+                      ) <?> "P.VDelayedOr"
+
+    let pVHashEqual = ((pToken EqualVerify) >>. ((pToken Sha256Hash)
+                      .>> (pToken Sha256) .>> (pToken EqualVerify) .>> (pNumberN 32u) .>> (pToken Size))
+                      |>> (fun maybeHashObj ->
+                            let hash = maybeHashObj.Value :?> uint256
+                            VTree(V.HashEqual(hash))
+                        )
+                      ) <?> "Parser pVHashEqual"
+
+    let pVThreshold = ((pToken EqualVerify) >>. (pToken Number))
+                      .>>. (many1 (pToken Add >>. pW))
+                      .>>. (pToken Any >>. pE)
+                      |>> fun (kws, east) ->
+                        let k = (fst kws).Value :?> uint32
+                        let e = east.castEUnsafe()
+                        let ws = (snd kws) |> List.toArray |> Array.map(fun ast -> ast.castWUnsafe())
+                        VTree(V.Threshold(k, e, ws))
+
+    let pVCheckSig = ((pToken CheckSigVerify)
+                     >>. (pToken Pk)
+                     |>> fun maybePkObj -> VTree(V.CheckSig(maybePkObj.Value :?> PubKey))
+                     ) <?> "Parser pVCheckSig"
+
+    let pVCheckMultisig = (pToken CheckMultiSigVerify)
+                          .>>. (many1 (pToken Pk))
+                          .>>. (pToken Number)
+                          >>= multisigBind VExpr
+
+    let pVTime = pToken Drop >>. pToken CheckSigVerify >>. pToken Number
+                 |>> fun maybeNumberObj ->
+                     let n = maybeNumberObj.Value :?> uint32
+                     VTree(V.Time(n))
+
+    let pVSwitchOr = (pToken EndIf >>. pV .>> pToken Else)
+                     .>>. (pV .>> pToken If)
+                     |>> fun (rightV, leftV) ->
+                         VTree(V.SwitchOr(leftV.castVUnsafe(), rightV.castVUnsafe()))
+
+    let pVCascadeOr = (pToken EndIf >>. pV .>> pToken NotIf)
+                      .>>. pE
+                      |>> fun (rightV, leftE) ->
+                          VTree(V.CascadeOr(leftE.castEUnsafe(), rightV.castVUnsafe()))
+
+    let pVSwitchOrT = (pToken Verify >>. pToken EndIf >>. pT .>> pToken Else)
+                      .>>. (pT .>> pToken If)
+                      |>> fun (rightT, leftT) ->
+                          VTree(V.SwitchOrT(leftT.castTUnsafe(), rightT.castTUnsafe()))
 
     // ---- Q -------
-    let pQPubKey = (pToken Pk)
+    let pQPubKey = ((pToken Pk)
                    |>> fun pk -> QTree(Q.Pubkey(pk.Value :?> NBitcoin.PubKey))
+                   ) <?> "P.QPubKey"
+
+
+    let pQOr = ((pToken EndIf) >>. pQ)
+               .>>. ((pToken Else) >>. pQ .>> pToken(If))
+               |>> fun (l, r) -> QTree(Q.Or(r.castQUnsafe(), l.castQUnsafe()))
     // ---- T -------
+
+    let pTHashEqual = (((pToken Sha256Hash)
+                       .>> (pToken Sha256)
+                       .>> (pToken EqualVerify)
+                       .>> (pNumberN 32u)
+                       .>> (pToken Size))
+                       |>> fun maybeHash -> TTree(T.HashEqual(maybeHash.Value :?> uint256)))
+                       <?> "Parser T.HashEqual"
+
+    let pTDelayedOr = ((pToken CheckSig) >>. (pToken EndIf)
+                      >>. pQ .>>. (pToken Else >>. pQ .>> pToken If)
+                      |>> fun (q1, q2) -> TTree(T.DelayedOr(q2.castQUnsafe(), q2.castQUnsafe()))
+                      ) <?> "Parser T.DelayedOr"
+
+    let pTTime = (pToken CheckSequenceVerify) >>. (pToken Number)
+                 |>> fun (maybeNumberObj) ->
+                     let n = maybeNumberObj.Value :?> uint32
+                     TTree(T.Time(n))
+
+    let pTSwitchOr = (pToken EndIf >>. pT .>> pToken Else)
+                     .>>. (pT .>> pToken If)
+                     |>> fun (rightT, leftT) ->
+                         TTree(T.SwitchOr(leftT.castTUnsafe(), rightT.castTUnsafe()))
+
+    let pTCascadeOr = (pToken EndIf >>. pT .>> pToken NotIf .>> pToken IfDup)
+                      .>>. pE
+                      |>> fun (rightT, leftE) ->
+                         TTree(T.CascadeOr(leftE.castEUnsafe(), rightT.castTUnsafe()))
     // ---- F -------
-    do pWImpl := (choice [pWCheckSig; pWTime])
-    do pEImpl := (choice [pECheckSig; pEParallelAnd])
-    do pVImpl := choice [pVDelayedOr]
-    do pQImpl := choice [pQPubKey]
+    let pFTime = (pToken ZeroNotEqual)
+                 >>. (pToken CheckSequenceVerify)
+                 >>. (pToken Number)
+                 |>> fun (maybeNumberObj) ->
+                     let n = maybeNumberObj.Value :?> uint32
+                     FTree(F.Time(n))
 
-    let ASTParser = choice [pW; pE; pQ; pV]
+    let pFSwitchOr = ((pToken EndIf) >>. pF .>> pToken Else)
+                     .>>. (pF .>> pToken If) 
+                     |>> fun (rightF, leftF) ->
+                         FTree(F.SwitchOr(leftF.castFUnsafe(), rightF.castFUnsafe()))
 
-let run parser (inputScript: Script) =
-    let ops = (inputScript.ToOps() |> Seq.toArray)
-    parser.parseFn {ops=ops; position=ops.Length - 1}
+    let pFFromV = (pNumberN 1u >>. pV)
+                  >>=(
+                      fun ast ->
+                          let name = "pFFromV"
+                          let innerFn state =
+                              match ast.castVUnsafe() with
+                              | V.CheckSig pk ->
+                                  Ok(FTree(F.CheckSig(pk)), state)
+                              | V.CheckMultiSig (m, pks) ->
+                                  Ok(FTree(F.CheckMultiSig(m, pks)), state)
+                              | V.HashEqual hash ->
+                                  Ok(FTree(F.HashEqual(hash)), state)
+                              | V.Threshold(k, e, ws)->
+                                  Ok(FTree(F.Threshold(k, e, ws)), state)
+                              | V.CascadeOr(l, r)->
+                                  Ok(FTree(F.CascadeOr(l, r)), state)
+                              | V.SwitchOr(l, r)->
+                                  Ok(FTree(F.SwitchOrV(l, r)), state)
+                              | V.DelayedOr(l, r)->
+                                  Ok(FTree(F.DelayedOr(l, r)), state)
+                              | e ->
+                                  let msg =  sprintf "unexpected expr\nactual: %A" e
+                                  Error(name, msg, state.position)
+                          {parseFn=innerFn; name=name}
+                  )
+
+    // ---- Composition ----
+    do pWImpl := (choice [pWCheckSig; pWTime; pWCastE; pWHashEqual]) <?> "pW"
+    do pEImpl := (choice [pECheckSig; pEParallelAnd; pEParallelOr; pEThreshold; pECheckMultisig; pETime; pELikely; pEUnlikely; pECascadeAnd]) <?> "pE"
+    do pVImpl := (choice [pVDelayedOr; pVHashEqual; pVThreshold; pVCheckSig; pVCheckMultisig; pVTime; pVSwitchOr; pVCascadeOr; pVSwitchOrT]) <?> "pV"
+    do pQImpl := choice [pQPubKey; pQOr]
+    do pTImpl := choice [pTHashEqual; pTDelayedOr; pTTime; pTSwitchOr; pTCascadeOr]
+    do pFImpl := choice [pFTime
+                         pFSwitchOr
+                         pFFromV
+                         ]
+
+    let ASTParser = choice [pW; pE; pQ; pV; pT; pF]
+
+    let run parser (inputScript: Script) =
+        let ops = (inputScript.ToOps() |> Seq.toArray)
+        printfn "going to run %s" parser.name
+        let res = parser.parseFn {ops=ops; position=ops.Length - 1}
+        printfn "result was %A" res
+        res
+
+
+    let postProcessAST (sc: Script) (info: AST * State): Result<AST, ParserError>  =
+        printfn "\n--------post processing \n"
+        let ast = fst info
+        let state = snd info
+        match ast.GetASTType() with
+        | TExpr
+        | FExpr
+        | VExpr
+        | QExpr ->
+            let lastOp = state.ops |> Array.last
+            let lastToken = castOpToToken lastOp
+            match lastToken with
+            | Error e -> Error ("PostProcess", e.Message, 0)
+            | Ok(Token.If)
+            | Ok(Token.NotIf)
+            | Ok(Token.Else) -> Ok(ast)
+            | _ ->
+                let parser = (pV) .>>. many (pToken Any)
+                match run parser sc with
+                | Ok r ->
+                    let left, right = (fst r)
+                    let leftV = left.castVUnsafe()
+                    match (ast.GetASTType()) with
+                    | TExpr -> Ok(TTree(T.And(leftV, ast.castTUnsafe())))
+                    | QExpr -> Ok(QTree(Q.And(leftV, ast.castQUnsafe())))
+                    | FExpr -> Ok(FTree(F.And(leftV, ast.castFUnsafe())))
+                    | VExpr -> Ok(VTree(V.And(leftV, ast.castVUnsafe())))
+                    | _ -> failwith "unreachable"
+                | Error e -> Error e
+        | _ -> Ok(ast)
 
 let parseScript (sc: Script) =
-    run TokenParser.ASTParser sc
+    TokenParser.run TokenParser.ASTParser sc
+    |> Result.map(fst)
+    //|> Result.bind(TokenParser.postProcessAST sc)
 
+let parseScriptUnsafe sc =
+    match parseScript sc with
+    | Ok r -> r
+    | Error e -> failwith (printParserError e)
