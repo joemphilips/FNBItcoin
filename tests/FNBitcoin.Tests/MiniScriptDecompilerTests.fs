@@ -18,14 +18,14 @@ let keys =
 
 let checkParseResult res expected =
     match res with
-    | Ok (r, s) -> Expect.equal expected r "failed to deserialize properly"
+    | Ok (ast) -> Expect.equal ast expected "failed to deserialize properly"
     | Result.Error e ->
     let name, msg, pos = e
     failwithf "name: %s\nmsg: %s\npos: %d" name msg pos
 
 [<Tests>]
 let tests =
-    testList "Decompiler" [ testCase "case1" <| fun _ ->
+    testList "Decompiler" [ ptestCase "case1" <| fun _ ->
                                 let pk = PubKey(keys.[0])
                                 let pk2 = PubKey(keys.[1])
                                 let boolAndWE = ETree(
@@ -37,7 +37,7 @@ let tests =
                                 let res = FNBitcoin.MiniScriptDecompiler.parseScript sc
                                 checkParseResult res boolAndWE
 
-                            testCase "case2" <| fun _ ->
+                            ptestCase "case2" <| fun _ ->
 
                                 let pk = PubKey(keys.[0])
                                 let pk2 = PubKey(keys.[1])
@@ -47,7 +47,7 @@ let tests =
                                 let res = FNBitcoin.MiniScriptDecompiler.parseScript sc
                                 checkParseResult res delayedOrV
 
-                            ptestCase "Should pass the testcase in rust-miniscript" <| fun _ -> 
+                            testCase "Should pass the testcase in rust-miniscript" <| fun _ -> 
                                let keysList =
                                    keys
                                    |> List.map (PubKey)
@@ -61,7 +61,7 @@ let tests =
                                        Expect.equal ser s 
                                            "Serialized Miniscript does not match expected script"
                                        let deser =
-                                           MiniScript.fromScript s
+                                           MiniScript.fromScriptUnsafe s
                                        Expect.equal tree deser 
                                            "deserialized script does not match expected MiniScript"
                                    | Result.Error e -> failwith e
