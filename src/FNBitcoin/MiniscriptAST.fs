@@ -5,7 +5,7 @@ open System.Text
 open FNBitcoin.MiniScriptParser
 open FNBitcoin.Utils
 
-// TODO: Use unativeint instead of uint
+// TODO: Use unativeint instead of uint?
 
 /// "E"xpression. takes more than one inputs from the stack, if it satisfies the condition,
 /// It will leave 1 onto the stack, otherwise leave 0
@@ -95,12 +95,11 @@ type ASTType =
     | VExpr
     | TExpr
 
- let (|E|_|) (s: Op[]) =
-     match s.[0].ToString() with
-     | PubKeyPattern pk when s.[1] = (!> OpcodeType.OP_CHECKSIG) ->
-        Some(E.CheckSig pk)
-     | _ -> None
+let private EncodeUint (n: uint32) =
+    Op.GetPushOp(int64 n).ToString()
 
+let private EncodeInt (n: int32) =
+    Op.GetPushOp(int64 n).ToString()
 
 type E with
     
@@ -130,19 +129,19 @@ type E with
         match this with
         | CheckSig pk -> sb.AppendFormat(" {0} OP_CHECKSIG", pk)
         | CheckMultiSig(m, pks) -> 
-            sb.AppendFormat(" {0:x}", m) |> ignore
+            sb.AppendFormat(" {0}", (EncodeUint m)) |> ignore
             for pk in pks do
                 do sb.AppendFormat(" {0}", (pk.ToHex())) |> ignore
-            sb.AppendFormat(" {0:x} OP_CHECKMULTISIG", pks.Length) |> ignore
+            sb.AppendFormat(" {0} OP_CHECKMULTISIG", EncodeInt(pks.Length)) |> ignore
             sb
         | Time t -> 
-            sb.AppendFormat(" OP_DUP OP_IF {0:x} OP_CSV OP_DROP OP_ENDIF", t)
+            sb.AppendFormat(" OP_DUP OP_IF {0} OP_CSV OP_DROP OP_ENDIF", (EncodeUint t))
         | Threshold(k, e, ws) -> 
             e.Serialize(sb) |> ignore
             for w in ws do
                 w.Serialize(sb) |> ignore
                 sb.Append(" OP_ADD") |> ignore
-            sb.AppendFormat(" {0:x} OP_EQUAL", k)
+            sb.AppendFormat(" {0} OP_EQUAL", (EncodeUint k))
         | ParallelAnd(l, r) -> 
             l.Serialize(sb) |> ignore
             r.Serialize(sb) |> ignore
@@ -232,7 +231,7 @@ and W with
             sb.Append(" OP_EQUALVERIFY 1 OP_ENDIF")
         | Time t -> 
             sb.AppendFormat
-                (" OP_SWAP OP_DUP OP_IF {0:x} OP_CSV OP_DROP OP_ENDIF", t)
+                (" OP_SWAP OP_DUP OP_IF {0} OP_CSV OP_DROP OP_ENDIF", (EncodeUint t))
         | CastE e -> 
             sb.Append(" OP_TOALTSTACK") |> ignore
             e.Serialize(sb) |> ignore
@@ -273,11 +272,11 @@ and F with
         | CheckSig pk -> 
             sb.AppendFormat(" {0} OP_CHECKSIGVERIFY 1", (pk.ToHex()))
         | CheckMultiSig(m, pks) -> 
-            sb.AppendFormat(" {0:x}", m) |> ignore
+            sb.AppendFormat(" {0}", (EncodeUint m)) |> ignore
             for pk in pks do
                 sb.AppendFormat(" {0}", (pk.ToHex())) |> ignore
             sb.AppendFormat(" {0:x} OP_CHECKMULTISIGVERIFY 1", pks.Length)
-        | Time t -> sb.AppendFormat(" {0:x} OP_CSV OP_0NOTEQUAL", t)
+        | Time t -> sb.AppendFormat(" {0} OP_CSV OP_0NOTEQUAL", (EncodeUint t))
         | HashEqual h -> 
             sb.AppendFormat
                 (" OP_SIZE 32 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUALVERIFY 1", h)
@@ -286,7 +285,7 @@ and F with
             for w in ws do
                 w.Serialize(sb) |> ignore
                 sb.Append(" OP_ADD") |> ignore
-            sb.AppendFormat(" {0:x} OP_EQUALVERIFY 1", k)
+            sb.AppendFormat(" {0} OP_EQUALVERIFY 1", (EncodeUint k))
         | And(l, r) -> 
             l.Serialize(sb) |> ignore
             r.Serialize(sb)
@@ -341,11 +340,11 @@ and V with
         | CheckSig pk -> 
             sb.AppendFormat(" {0} OP_CHECKSIGVERIFY ", (pk.ToHex()))
         | CheckMultiSig(m, pks) -> 
-            sb.AppendFormat(" {0}", m) |> ignore
+            sb.AppendFormat(" {0}", (EncodeUint m)) |> ignore
             for pk in pks do
                 sb.AppendFormat(" {0}", (pk.ToHex())) |> ignore
             sb.AppendFormat(" {0} OP_CHECKMULTISIGVERIFY", pks.Length)
-        | Time t -> sb.AppendFormat(" {0:x} OP_CSV OP_DROP", t)
+        | Time t -> sb.AppendFormat(" {0:x} OP_CSV OP_DROP", (EncodeUint t))
         | HashEqual h -> 
             sb.AppendFormat
                 (" OP_SIZE 32 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUALVERIFY", h)
@@ -354,7 +353,7 @@ and V with
             for w in ws do
                 w.Serialize(sb) |> ignore
                 sb.Append(" OP_ADD") |> ignore
-            sb.AppendFormat(" {0} OP_EQUALVERIFY", k)
+            sb.AppendFormat(" {0} OP_EQUALVERIFY", (EncodeUint k))
         | And(l, r) -> 
             l.Serialize(sb) |> ignore
             r.Serialize(sb)
@@ -399,7 +398,7 @@ and T with
     
     member this.Serialize(sb : StringBuilder) : StringBuilder =
         match this with
-        | Time t -> sb.AppendFormat(" {0:x} OP_CSV", t)
+        | Time t -> sb.AppendFormat(" {0} OP_CSV", (EncodeUint t))
         | HashEqual h -> 
             sb.AppendFormat
                 (" OP_SIZE 32 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUAL", h)

@@ -107,7 +107,7 @@ let tests =
                                        "2 %s %s 2 OP_CHECKMULTISIGVERIFY" 
                                        keys.[2] keys.[3]
 
-                               let s3_partial = Script(sprintf "%s 2710 OP_CSV" policy3_2)
+                               let s3_partial = Script(sprintf "%s 1027 OP_CSV" policy3_2)
                                roundtrip r3_partial s3_partial
 
                                // Liquid policy
@@ -128,7 +128,7 @@ let tests =
                                    sprintf 
                                        "2 %s %s 2 OP_CHECKMULTISIG" 
                                        keys.[0] keys.[1]
-                               let tmp = sprintf "%s OP_IFDUP OP_NOTIF %s 2710 OP_CSV OP_ENDIF"
+                               let tmp = sprintf "%s OP_IFDUP OP_NOTIF %s 1027 OP_CSV OP_ENDIF"
                                                  policy3_1 policy3_2
                                let s3 =
                                    Script(tmp)
