@@ -491,7 +491,7 @@ module TokenParser =
                      TTree(T.Time(n))
                   ) <?> "Parser T.Time"
 
-    let pTSwitchOr = (pToken EndIf >>. pT .>> pToken Else)
+    let pTSwitchOr = ((pToken EndIf >>. pT .>> pToken Else)
                      .>>. (pT .>> pToken If)
                      |>> fun (rightT, leftT) ->
                          TTree(T.SwitchOr(leftT.castTUnsafe(), rightT.castTUnsafe()))
@@ -541,26 +541,7 @@ module TokenParser =
                   )
 
     // ---- Composition ----
-    do pWImpl := (choice [pWCheckSig; pWTime; pWCastE; pWHashEqual]) <?> "pW"
-    do pEImpl := (choice [pECheckSig; pEParallelAnd; pEParallelOr; pEThreshold; pECheckMultisig; pETime; pELikely; pEUnlikely; pECascadeAnd]) <?> "pE"
-    do pVImpl := (choice [pVDelayedOr; pVHashEqual; pVThreshold; pVCheckSig; pVCheckMultisig; pVTime; pVSwitchOr; pVCascadeOr; pVSwitchOrT]) <?> "pV"
-    do pQImpl := (choice [pQPubKey; pQOr]) <?> "pQ"
-    do pTImpl := (choice [pTHashEqual; pTDelayedOr; pTTime; pTSwitchOr; pTCascadeOr]) <?> "pT"
-    do pFImpl := (choice [pFTime
-                          pFSwitchOr
-                          pFFromV
-                          ]) <?> "pF"
-
-    let ASTParser = choice [pW; pE; pQ; pV; pT; pF]
-
-    let run parser (inputScript: Script) =
-        let ops = (inputScript.ToOps() |> Seq.toArray)
-        printfn "going to run %s" parser.name
-        let res = parser.parseFn {ops=ops; position=ops.Length - 1}
-        printfn "result was %A" res
-        res
-
-
+    let mutable SubExpressionParser, SubExpressionParserImpl = createParserForwardedToRef<AST, State>()
     let private shouldPostProcess(info: AST * State) =
         let ast = fst info
         let state = snd info
@@ -569,7 +550,7 @@ module TokenParser =
         else
             /// If last opcode is a certain one, no need for post processing.
             let checkLastOp state =
-                let lastOp = state.ops |> Array.last
+                let lastOp = state.ops.[state.position]
                 let lastToken = castOpToToken lastOp
                 match lastToken with
                 | Error e -> Error ("PostProcess",
@@ -592,41 +573,82 @@ module TokenParser =
                 | Error _ -> Ok(false)
             | _ -> Ok(false)
 
-    let private postProcessCore(sc: Script, info: AST * State) =
-        printfn "\n--------post processing\nscript: %A\ninfo:%A \n" sc info
-        let ast = fst info
-        let state = snd info
-        //
-        let parser = (pV) .>>. many (pToken Any)
-        match run parser sc with
-        | Ok r ->
-            let left, right = (fst r)
-            let leftV = left.castVUnsafe()
-            match (ast.GetASTType()) with
-            | TExpr -> Ok(TTree(T.And(leftV, ast.castTUnsafe())))
-            | EExpr -> Ok(TTree(T.And(leftV, ast.castTUnsafe())))
-            | QExpr -> Ok(QTree(Q.And(leftV, ast.castQUnsafe())))
-            | FExpr ->
-                match ast.castT() with
-                | Ok t -> Ok(TTree(t))
-                | Error _ -> Ok(FTree(F.And(leftV, ast.castFUnsafe())))
-            | VExpr -> Ok(VTree(V.And(leftV, ast.castVUnsafe())))
-            | _ -> failwith "unreachable"
-        | Error e -> Error e
+    let postProcess (ast: AST) =
+        let name = "postProcess"
+        printfn "\n--------Should we post process for :\n%A " ast
+        let innerFn state =
+            match shouldPostProcess(ast, state) with
+            | Error e -> Error e
+            | Ok(false) -> Ok((ast), state)
+            | Ok(true) ->
+                printfn "\n--------post processing with state:\n%A " state
+                let rightAST = ast
 
-    let postProcessAST (sc: Script) (info: AST * State): Result<AST, ParserError>  =
-        match shouldPostProcess info with
-        | Ok true -> // we may need to cast the decompilation result
-            postProcessCore (sc, info)
-        | Ok false -> // nothing left to do
-            Ok(fst info)
-        | Error e -> Error e
+                match run SubExpressionParser state with
+                | Error e -> Error e
+                | Ok result ->
+                    let leftAST, state = result
+                    let leftV = leftAST.castVUnsafe()
+                    match (rightAST.GetASTType()) with
+                    | TExpr -> Ok(TTree(T.And(leftV, rightAST.castTUnsafe())), state)
+                    | EExpr -> Ok(TTree(T.And(leftV, rightAST.castTUnsafe())), state)
+                    | QExpr -> Ok(QTree(Q.And(leftV, rightAST.castQUnsafe())), state)
+                    | FExpr ->
+                        match rightAST.castT() with
+                        | Ok t -> Ok(TTree(t), state)
+                        | Error _ -> Ok(FTree(F.And(leftV, rightAST.castFUnsafe())), state)
+                    | VExpr -> Ok(VTree(V.And(leftV, rightAST.castVUnsafe())), state)
+                    | _ -> failwith "unreachable"
+
+        {parseFn=innerFn; name = name}
+
+    do SubExpressionParserImpl := choice [pW; pE; pQ; pV; pT; pF]
+
+    let ASTParser = (SubExpressionParser >>= postProcess) <?> "ASTParser"
+
+    do pWImpl := (choice [pWCheckSig; pWTime; pWCastE; pWHashEqual] >>= postProcess) <?> "pW"
+    do pEImpl := (choice [pECheckSig
+                          pEParallelAnd
+                          pEParallelOr
+                          pEThreshold
+                          pECheckMultisig
+                          pETime
+                          pELikely
+                          pEUnlikely
+                          pECascadeAnd
+                          ]
+                      >>= postProcess) <?> "pE"
+    do pVImpl := (choice [pVDelayedOr
+                          pVHashEqual
+                          pVThreshold
+                          pVCheckSig
+                          pVCheckMultisig
+                          pVTime
+                          pVSwitchOr
+                          pVCascadeOr
+                          pVSwitchOrT
+                          ]
+                      >>= postProcess) <?> "pV"
+    do pQImpl := (choice [pQPubKey; pQOr] >>= postProcess) <?> "pQ"
+    do pTImpl := (choice [pTHashEqual; pTDelayedOr; pTTime; pTSwitchOr; pTCascadeOr] >>= postProcess) <?> "pT"
+    do pFImpl := (choice [pFTime
+                          pFSwitchOr
+                          pFFromV
+                          ]
+                      >>= postProcess) <?> "pF"
+
+
+    let parse_subexpression (state: State) =
+        printfn "going to parse state %A" state
+        let res = run ASTParser state
+        printfn "result was %A" res
+        res
 
 
 let parseScript (sc: Script) =
-    TokenParser.run TokenParser.ASTParser sc
-    |> Result.map(fst)
-    // |> Result.bind(TokenParser.postProcessAST sc)
+    let ops = (sc.ToOps() |> Seq.toArray)
+    let initialState = {ops=ops; position=ops.Length - 1}
+    TokenParser.parse_subexpression initialState |> Result.map(fst)
 
 let parseScriptUnsafe sc =
     match parseScript sc with
