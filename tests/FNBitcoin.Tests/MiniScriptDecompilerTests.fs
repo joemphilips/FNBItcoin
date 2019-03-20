@@ -47,7 +47,7 @@ let tests =
                                 let res = FNBitcoin.MiniScriptDecompiler.parseScript sc
                                 checkParseResult res delayedOrV
 
-                            ftestCase "Should pass the testcase in rust-miniscript" <| fun _ -> 
+                            testCase "Should pass the testcase in rust-miniscript" <| fun _ -> 
                                let keysList =
                                    keys
                                    |> List.map (PubKey)
@@ -133,9 +133,10 @@ let tests =
                                let s3 =
                                    Script(tmp)
                                roundtrip r3 s3
+
                                let r4 =
                                    MiniScript.fromAST 
                                        (TTree(T.Time(921u)))
-                               let s4 = Script("0399 OP_CSV")
+                               let s4 = Script("9903 OP_CSV")
                                roundtrip r4 s4
                            ]
