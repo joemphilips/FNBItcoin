@@ -436,6 +436,7 @@ module TokenParser =
                      ) <?> "Parser pVCheckSig"
 
     let pVCheckMultisig = (pToken CheckMultiSigVerify)
+                          >>. (pToken Number)
                           .>>. (many1 (pToken Pk))
                           .>>. (pToken Number)
                           >>= multisigBind VExpr
