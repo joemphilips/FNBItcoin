@@ -130,18 +130,19 @@ type E with
         match this with
         | CheckSig pk -> sb.AppendFormat(" {0} OP_CHECKSIG", pk)
         | CheckMultiSig(m, pks) -> 
-            sb.AppendFormat(" {0}", m) |> ignore
+            sb.AppendFormat(" {0:x}", m) |> ignore
             for pk in pks do
                 do sb.AppendFormat(" {0}", (pk.ToHex())) |> ignore
+            sb.AppendFormat(" {0:x} OP_CHECKMULTISIG", pks.Length) |> ignore
             sb
         | Time t -> 
-            sb.AppendFormat(" OP_DUP OP_IF {0} OP_CSV OP_DROP OP_ENDIF", t)
+            sb.AppendFormat(" OP_DUP OP_IF {0:x} OP_CSV OP_DROP OP_ENDIF", t)
         | Threshold(k, e, ws) -> 
             e.Serialize(sb) |> ignore
             for w in ws do
                 w.Serialize(sb) |> ignore
                 sb.Append(" OP_ADD") |> ignore
-            sb.AppendFormat(" {0} OP_EQUAL", k)
+            sb.AppendFormat(" {0:x} OP_EQUAL", k)
         | ParallelAnd(l, r) -> 
             l.Serialize(sb) |> ignore
             r.Serialize(sb) |> ignore
@@ -231,7 +232,7 @@ and W with
             sb.Append(" OP_EQUALVERIFY 1 OP_ENDIF")
         | Time t -> 
             sb.AppendFormat
-                (" OP_SWAP OP_DUP OP_IF {0} OP_CSV OP_DROP OP_ENDIF", t)
+                (" OP_SWAP OP_DUP OP_IF {0:x} OP_CSV OP_DROP OP_ENDIF", t)
         | CastE e -> 
             sb.Append(" OP_TOALTSTACK") |> ignore
             e.Serialize(sb) |> ignore
@@ -272,11 +273,11 @@ and F with
         | CheckSig pk -> 
             sb.AppendFormat(" {0} OP_CHECKSIGVERIFY 1", (pk.ToHex()))
         | CheckMultiSig(m, pks) -> 
-            sb.AppendFormat(" {0}", m) |> ignore
+            sb.AppendFormat(" {0:x}", m) |> ignore
             for pk in pks do
                 sb.AppendFormat(" {0}", (pk.ToHex())) |> ignore
-            sb.AppendFormat(" {0} OP_CHECKMULTISIGVERIFY 1", pks.Length)
-        | Time t -> sb.AppendFormat(" {0} OP_CSV OP_0NOTEQUAL", t)
+            sb.AppendFormat(" {0:x} OP_CHECKMULTISIGVERIFY 1", pks.Length)
+        | Time t -> sb.AppendFormat(" {0:x} OP_CSV OP_0NOTEQUAL", t)
         | HashEqual h -> 
             sb.AppendFormat
                 (" OP_SIZE 32 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUALVERIFY 1", h)
@@ -285,7 +286,7 @@ and F with
             for w in ws do
                 w.Serialize(sb) |> ignore
                 sb.Append(" OP_ADD") |> ignore
-            sb.AppendFormat(" {0} OP_EQUALVERIFY 1", k)
+            sb.AppendFormat(" {0:x} OP_EQUALVERIFY 1", k)
         | And(l, r) -> 
             l.Serialize(sb) |> ignore
             r.Serialize(sb)
@@ -343,11 +344,11 @@ and V with
             sb.AppendFormat(" {0}", m) |> ignore
             for pk in pks do
                 sb.AppendFormat(" {0}", (pk.ToHex())) |> ignore
-            sb.AppendFormat(" {0} OP_CHECKMULTISIGVERIFY 1", pks.Length)
-        | Time t -> sb.AppendFormat(" {0} OP_CSV OP_DROP", t)
+            sb.AppendFormat(" {0} OP_CHECKMULTISIGVERIFY", pks.Length)
+        | Time t -> sb.AppendFormat(" {0:x} OP_CSV OP_DROP", t)
         | HashEqual h -> 
             sb.AppendFormat
-                (" OP_SIZE 32 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUALVERIFY 1", h)
+                (" OP_SIZE 32 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUALVERIFY", h)
         | Threshold(k, e, ws) -> 
             e.Serialize(sb) |> ignore
             for w in ws do
@@ -398,7 +399,7 @@ and T with
     
     member this.Serialize(sb : StringBuilder) : StringBuilder =
         match this with
-        | Time t -> sb.AppendFormat(" {0} OP_CSV", t)
+        | Time t -> sb.AppendFormat(" {0:x} OP_CSV", t)
         | HashEqual h -> 
             sb.AppendFormat
                 (" OP_SIZE 32 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUAL", h)
@@ -481,9 +482,29 @@ type AST with
         | VTree _ -> VExpr
         | TTree _ -> TExpr
 
+    member this.IsT() =
+        match this with
+        | ETree _ 
+        | TTree _ -> true
+        | FTree f ->
+            match f with
+            | F.CascadeOr _
+            | F.SwitchOrV _ -> true
+            | _ -> false
+        | _ -> false
+
     member this.castT() : Result<T, string> =
         match this with
         | TTree t -> Ok t
+        | FTree f ->
+            match f with
+            | F.CascadeOr(l, r) ->  Ok(T.CascadeOrV(l, r))
+            | F.SwitchOrV(l, r) ->  Ok(T.SwitchOrV(l, r))
+            | _ -> Error(sprintf "failed to cast %s" (this.Print()))
+        | ETree e ->
+            match e with
+            | E.ParallelOr(l, r) ->  Ok(T.ParallelOr(l, r))
+            | otherE -> Ok(T.CastE(otherE))
         | _ -> Error(sprintf "failed to cast %s" (this.Print()))
     
     member this.castE() : Result<E, string> =

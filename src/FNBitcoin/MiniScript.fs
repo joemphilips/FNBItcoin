@@ -9,9 +9,9 @@ type MiniScript = MiniScript of AST
 
 module MiniScript =
     let fromAST (t : AST) : Result<MiniScript, string> =
-        match t with
-        | TTree t -> Ok(MiniScript(TTree t))
-        | _ -> Error "AST was not top-level (T) representation"
+        match t.castT() with
+        | Ok t -> Ok(MiniScript(TTree t))
+        | o -> Error (sprintf "AST was not top-level (T) representation\n%A" o)
     
     let toAST (m : MiniScript) =
         match m with

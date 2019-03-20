@@ -25,7 +25,7 @@ let checkParseResult res expected =
 
 [<Tests>]
 let tests =
-    testList "Decompiler" [ ptestCase "case1" <| fun _ ->
+    testList "Decompiler" [ testCase "case1" <| fun _ ->
                                 let pk = PubKey(keys.[0])
                                 let pk2 = PubKey(keys.[1])
                                 let boolAndWE = ETree(
@@ -37,7 +37,7 @@ let tests =
                                 let res = FNBitcoin.MiniScriptDecompiler.parseScript sc
                                 checkParseResult res boolAndWE
 
-                            ptestCase "case2" <| fun _ ->
+                            testCase "case2" <| fun _ ->
 
                                 let pk = PubKey(keys.[0])
                                 let pk2 = PubKey(keys.[1])
@@ -47,7 +47,7 @@ let tests =
                                 let res = FNBitcoin.MiniScriptDecompiler.parseScript sc
                                 checkParseResult res delayedOrV
 
-                            testCase "Should pass the testcase in rust-miniscript" <| fun _ -> 
+                            ftestCase "Should pass the testcase in rust-miniscript" <| fun _ -> 
                                let keysList =
                                    keys
                                    |> List.map (PubKey)
@@ -62,7 +62,7 @@ let tests =
                                            "Serialized Miniscript does not match expected script"
                                        let deser =
                                            MiniScript.fromScriptUnsafe s
-                                       Expect.equal tree deser 
+                                       Expect.equal deser tree 
                                            "deserialized script does not match expected MiniScript"
                                    | Result.Error e -> failwith e
 
@@ -93,6 +93,23 @@ let tests =
                                             keys.[2] keys.[3] 
                                             keys.[4])
                                roundtrip r2 s2
+
+                               let r3_partial =
+                                   MiniScript.fromAST(TTree(T.And
+                                      (V.CheckMultiSig
+                                          (2u, 
+                                           keysList.[2..3]), 
+                                       T.Time(10000u))
+                                      ))
+
+                               let policy3_2 =
+                                   sprintf 
+                                       "2 %s %s 2 OP_CHECKMULTISIGVERIFY" 
+                                       keys.[2] keys.[3]
+
+                               let s3_partial = Script(sprintf "%s 2710 OP_CSV" policy3_2)
+                               roundtrip r3_partial s3_partial
+
                                // Liquid policy
                                let r3 =
                                    MiniScript.fromAST 
@@ -109,21 +126,16 @@ let tests =
                                                            (10000u)))))
                                let policy3_1 =
                                    sprintf 
-                                       "OP_2 %s %s OP_2 OP_CHECKMULTISIG" 
+                                       "2 %s %s 2 OP_CHECKMULTISIG" 
                                        keys.[0] keys.[1]
-                               let policy3_2 =
-                                   sprintf 
-                                       "OP_2 %s %s OP_2 OP_CHECKMULTISIGVERIFY" 
-                                       keys.[2] keys.[3]
+                               let tmp = sprintf "%s OP_IFDUP OP_NOTIF %s 2710 OP_CSV OP_ENDIF"
+                                                 policy3_1 policy3_2
                                let s3 =
-                                   Script
-                                       (sprintf 
-                                            "%s OP_IFDUP OP_NOTIF %s 1027 OPNOP3 OP_ENDIF" 
-                                            policy3_1 policy3_2)
+                                   Script(tmp)
                                roundtrip r3 s3
                                let r4 =
                                    MiniScript.fromAST 
                                        (TTree(T.Time(921u)))
-                               let s4 = Script("9903 OP_NOP3")
+                               let s4 = Script("0399 OP_CSV")
                                roundtrip r4 s4
                            ]
