@@ -139,4 +139,19 @@ let tests =
                                        (TTree(T.Time(921u)))
                                let s4 = Script("9903 OP_CSV")
                                roundtrip r4 s4
+
+                               let r5 = MiniScript.fromAST (TTree(
+                                    T.SwitchOrV(
+                                        V.CheckSig(keysList.[0]),
+                                        V.And(
+                                            V.CheckSig(keysList.[1]),
+                                            V.CheckSig(keysList.[2])
+                                        )
+                                    )))
+
+                               let scriptStr = sprintf "OP_IF %s OP_CHECKSIGVERIFY OP_ELSE %s OP_CHECKSIGVERIFY %s OP_CHECKSIGVERIFY OP_ENDIF 1"
+                                                       keys.[0] keys.[1] keys.[2]
+                               let s5 = Script(scriptStr)
+                               roundtrip r5 s5
+
                            ]
