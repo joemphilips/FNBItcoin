@@ -167,12 +167,15 @@ let config =
                                        maxTest = 30
                                        endSize = 32 }
 
-let roundtrip p =
-    let m = CompiledNode.fromPolicy(p).compileUnsafe()
+let roundTripFromMiniScript (m: MiniScript) =
     let sc = m.ToScript()
     printfn "going to decompile %A: It should be %A" sc m
     let m2 = MiniScript.fromScriptUnsafe sc
-    Expect.equal m m2 "failed"
+    Expect.equal m2 m "failed"
+
+let roundtrip p =
+    let m = CompiledNode.fromPolicy(p).compileUnsafe()
+    roundTripFromMiniScript m
 
 [<Tests>]
 let tests2 =
@@ -189,5 +192,21 @@ let tests2 =
             let customState = {ops=ops; position=ops.Length - 1}
             let m2 = run customParser customState
             Expect.isOk m2 "failed"
-
+        testCase "Case found by property tests: 2" <| fun _ ->
+            let hash = uint256.Parse("59141e52303a755307114c2a5e6823010b3f1d586216742f396d4b06106e222c")
+            let input = MiniScript.fromASTUnsafe(TTree(T.HashEqual(hash)))
+            roundTripFromMiniScript input
+        testCase "Case found by property tests: 3" <| fun _ ->
+            let hash = uint256.Parse("59141e52303a755307114c2a5e6823010b3f1d586216742f396d4b06106e222c")
+            let input = MiniScript.fromASTUnsafe(
+                TTree(
+                    T.CastE(
+                        E.Threshold(
+                            1u,
+                            E.Time(4u),
+                            [|
+                                W.Time(7u)
+                            |]
+                            ))))
+            roundTripFromMiniScript input
     ]

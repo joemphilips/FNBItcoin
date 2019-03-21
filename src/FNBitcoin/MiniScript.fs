@@ -12,6 +12,11 @@ module MiniScript =
         match t.castT() with
         | Ok t -> Ok(MiniScript(TTree t))
         | o -> Error (sprintf "AST was not top-level (T) representation\n%A" o)
+
+    let fromASTUnsafe(t: AST) =
+        match fromAST t with
+        | Ok t -> t
+        | Error e -> failwith e
     
     let toAST (m : MiniScript) =
         match m with

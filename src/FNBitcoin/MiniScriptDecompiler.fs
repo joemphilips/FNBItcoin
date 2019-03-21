@@ -131,8 +131,8 @@ type Token with
 let private tryGetItemFromOp (op: Op) =
     let size = op.PushData.Length
     match size with
-    | 20 -> Ok(Token.Hash160Hash(uint160 (op.PushData)))
-    | 32 -> Ok(Token.Sha256Hash(uint256 (op.PushData)))
+    | 20 -> Ok(Token.Hash160Hash(uint160 (op.PushData, false)))
+    | 32 -> Ok(Token.Sha256Hash(uint256 (op.PushData, false)))
     | 33 -> 
         try 
             Ok(Token.Pk(NBitcoin.PubKey(op.PushData)))
@@ -174,6 +174,7 @@ let private castOpToToken (op : Op) : Result<Token, ParseException> =
     | OpcodeType.OP_VERIFY -> Ok(Token.Verify)
     | OpcodeType.OP_HASH160 -> Ok(Token.Hash160)
     | OpcodeType.OP_SHA256 -> Ok(Token.Sha256)
+    | OpcodeType.OP_ADD -> Ok(Token.Add)
     | OpcodeType.OP_0 -> Ok(Token.Number 0u)
     | OpcodeType.OP_1 -> Ok(Token.Number 1u)
     | OpcodeType.OP_2 -> Ok(Token.Number 2u)
@@ -191,7 +192,7 @@ let private castOpToToken (op : Op) : Result<Token, ParseException> =
     | OpcodeType.OP_14 -> Ok(Token.Number 14u)
     | OpcodeType.OP_15 -> Ok(Token.Number 15u)
     | OpcodeType.OP_16 -> Ok(Token.Number 16u)
-    | otherOp when (byte 0x01) < (byte otherOp) && (byte otherOp) < (byte 0x4B) -> 
+    | otherOp when (byte 0x01) <= (byte otherOp) && (byte otherOp) < (byte 0x4B) -> 
         tryGetItemFromOp op
     | otherOp when (byte 0x4B) <= (byte otherOp) -> 
         Error(ParseException(sprintf "MiniScript does not support pushdata bigger than 33. Got %s" (otherOp.ToString())))
@@ -245,6 +246,7 @@ module TokenParser =
                 let ops = state.ops.[pos]
                 printfn "DEBUG: going to parse %s in position %d by parser (%s)" (ops.ToString()) (pos) name
                 let r = castOpToToken ops
+                printfn "DEBUG: after casting it was %A" r
                 match r with
                 | Error pex ->
                     let msg = sprintf "opcode %s is not supported by MiniScript %s" ops.Name pex.Message
@@ -280,6 +282,7 @@ module TokenParser =
             let name = sprintf "number validator %d" n
             let innerFn state =
                 let actual = maybeNumberObj.Value :?> uint32
+                printfn "expected number was \n%d\n actual:%d" n actual
                 if actual = n then
                     Ok(n, state)
                 else
@@ -472,11 +475,12 @@ module TokenParser =
                |>> fun (l, r) -> QTree(Q.Or(r.castQUnsafe(), l.castQUnsafe()))
     // ---- T -------
 
-    let pTHashEqual = (((pToken Sha256Hash)
-                       .>> (pToken Sha256)
-                       .>> (pToken EqualVerify)
-                       .>> (pNumberN 32u)
-                       .>> (pToken Size))
+    let pTHashEqual = ((pToken Equal
+                       >>. pToken Sha256Hash
+                       .>> pToken Sha256
+                       .>> pToken EqualVerify
+                       .>> pNumberN 32u
+                       .>> pToken Size)
                        |>> fun maybeHash -> TTree(T.HashEqual(maybeHash.Value :?> uint256)))
                        <?> "Parser T.HashEqual"
 
