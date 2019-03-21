@@ -170,15 +170,16 @@ let config =
 let roundtrip p =
     let m = CompiledNode.fromPolicy(p).compileUnsafe()
     let sc = m.ToScript()
+    printfn "going to decompile %A: It should be %A" sc m
     let m2 = MiniScript.fromScriptUnsafe sc
-    Expect.equal m m2
+    Expect.equal m m2 "failed"
 
 [<Tests>]
 let tests2 =
     testList "Should convert Policy <-> AST <-> Script" [
         ftestPropertyWithConfig config "Every possible MiniScript"  <| fun (p: Policy) ->
             roundtrip p
-        testCase "Case found by property tests" <| fun _ ->
+        testCase "Case found by property tests: 1" <| fun _ ->
             let input = Policy.Or(Key(keysList.[0]), Policy.And(Policy.Time(2u), Policy.Time(1u)))
             let m = CompiledNode.fromPolicy(input).compileUnsafe()
             let sc = m.ToScript()
@@ -188,5 +189,5 @@ let tests2 =
             let customState = {ops=ops; position=ops.Length - 1}
             let m2 = run customParser customState
             Expect.isOk m2 "failed"
-            // Expect.equal m m2 "failed decompilation"
+
     ]
