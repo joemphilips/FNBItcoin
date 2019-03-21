@@ -441,7 +441,7 @@ module TokenParser =
                           .>>. (pToken Number)
                           >>= multisigBind VExpr
 
-    let pVTime = pToken Drop >>. pToken CheckSigVerify >>. pToken Number
+    let pVTime = pToken Drop >>. pToken CheckSequenceVerify >>. pToken Number
                  |>> fun maybeNumberObj ->
                      let n = maybeNumberObj.Value :?> uint32
                      VTree(V.Time(n))

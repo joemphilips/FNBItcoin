@@ -176,9 +176,9 @@ let roundtrip p =
 [<Tests>]
 let tests2 =
     testList "Should convert Policy <-> AST <-> Script" [
-        testPropertyWithConfig config "Every possible MiniScript"  <| fun (p: Policy) ->
+        ftestPropertyWithConfig config "Every possible MiniScript"  <| fun (p: Policy) ->
             roundtrip p
-        ftestCase "Case found by property tests" <| fun _ ->
+        testCase "Case found by property tests" <| fun _ ->
             let input = Policy.Or(Key(keysList.[0]), Policy.And(Policy.Time(2u), Policy.Time(1u)))
             let m = CompiledNode.fromPolicy(input).compileUnsafe()
             let sc = m.ToScript()
