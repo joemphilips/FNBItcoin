@@ -1081,3 +1081,8 @@ type CompiledNode with
     member this.compile() =
         let node = CompiledNode.best_t (this, 1.0, 0.0)
         MiniScript.fromAST (node.ast)
+
+    member this.compileUnsafe() =
+        match this.compile() with
+        | Ok miniscript -> miniscript
+        | Error e -> failwith e

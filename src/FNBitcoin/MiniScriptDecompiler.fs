@@ -638,17 +638,10 @@ module TokenParser =
                       >>= postProcess) <?> "pF"
 
 
-    let parse_subexpression (state: State) =
-        printfn "going to parse state %A" state
-        let res = run ASTParser state
-        printfn "result was %A" res
-        res
-
-
 let parseScript (sc: Script) =
     let ops = (sc.ToOps() |> Seq.toArray)
     let initialState = {ops=ops; position=ops.Length - 1}
-    TokenParser.parse_subexpression initialState |> Result.map(fst)
+    run TokenParser.ASTParser initialState |> Result.map(fst)
 
 let parseScriptUnsafe sc =
     match parseScript sc with

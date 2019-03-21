@@ -92,7 +92,8 @@ let tests =
                   | Policy p -> printPolicy p
                   | _ -> failwith "Failed to parse policy"
               Expect.equal data data2 "Could not parse symmetrically"
-          testPropertyWithConfig config "bidirectional conversion as property" <| fun (p : Policy) -> 
+
+          testPropertyWithConfig config "Should convert <Input string> <-> <Policy>" <| fun (p : Policy) -> 
               match p.print() with
               | Policy p2 -> Expect.equal p p2
               | _ -> failwith "Failed to convert bidirectionally" ]
