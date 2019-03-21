@@ -578,9 +578,14 @@ module TokenParser =
         printfn "\n--------Should we post process for :\n%A " ast
         let innerFn state =
             match shouldPostProcess(ast, state) with
-            | Error e -> Error e
-            | Ok(false) -> Ok((ast), state)
+            | Error e ->
+                printfn "no we got error %A" e
+                Error e
+            | Ok(false) ->
+                printfn "no we don't have to"
+                Ok((ast), state)
             | Ok(true) ->
+                printfn "yes we should"
                 printfn "\n--------post processing with state:\n%A " state
                 let rightAST = ast
 
@@ -602,46 +607,57 @@ module TokenParser =
 
         {parseFn=innerFn; name = name}
 
-    do SubExpressionParserImpl := choice [pW; pE; pQ; pV; pT; pF]
+    /// validate AST is a specific type
+    let pTryCastToType (expected: ASTType) (ast: AST) =
+        let name = "pIsTypeOf"
+        let innerFn state =
+            if ast.GetASTType() = expected then
+                Ok(ast, state)
+            else if expected = TExpr && ast.IsT() then
+                Ok(TTree(ast.castTUnsafe()), state)
+            else
+                let msg = sprintf "AST is not the expected type\nexpected: %A\nactual: %A" expected ast
+                Error(name, msg, state.position)
+        {parseFn=innerFn; name=name}
 
-    let ASTParser = (SubExpressionParser >>= postProcess) <?> "ASTParser"
+    do SubExpressionParserImpl := (choice [
+                                            pWCheckSig; pWTime; pWCastE; pWHashEqual
+                                            pECheckSig
+                                            pEParallelAnd
+                                            pEParallelOr
+                                            pEThreshold
+                                            pECheckMultisig
+                                            pETime
+                                            pELikely
+                                            pEUnlikely
+                                            pECascadeAnd
+                                            pVDelayedOr
+                                            pVHashEqual
+                                            pVThreshold
+                                            pVCheckSig
+                                            pVCheckMultisig
+                                            pVTime
+                                            pVSwitchOr
+                                            pVCascadeOr
+                                            pVSwitchOrT
+                                            pQPubKey; pQOr
+                                            pTHashEqual; pTDelayedOr; pTTime; pTSwitchOr; pTCascadeOr
+                                            pFTime
+                                            pFSwitchOr
+                                            pFFromV
+                                         ] >>= postProcess) <?> "SubexpressionParser"
 
-    do pWImpl := (choice [pWCheckSig; pWTime; pWCastE; pWHashEqual] >>= postProcess) <?> "pW"
-    do pEImpl := (choice [pECheckSig
-                          pEParallelAnd
-                          pEParallelOr
-                          pEThreshold
-                          pECheckMultisig
-                          pETime
-                          pELikely
-                          pEUnlikely
-                          pECascadeAnd
-                          ]
-                      >>= postProcess) <?> "pE"
-    do pVImpl := (choice [pVDelayedOr
-                          pVHashEqual
-                          pVThreshold
-                          pVCheckSig
-                          pVCheckMultisig
-                          pVTime
-                          pVSwitchOr
-                          pVCascadeOr
-                          pVSwitchOrT
-                          ]
-                      >>= postProcess) <?> "pV"
-    do pQImpl := (choice [pQPubKey; pQOr] >>= postProcess) <?> "pQ"
-    do pTImpl := (choice [pTHashEqual; pTDelayedOr; pTTime; pTSwitchOr; pTCascadeOr] >>= postProcess) <?> "pT"
-    do pFImpl := (choice [pFTime
-                          pFSwitchOr
-                          pFFromV
-                          ]
-                      >>= postProcess) <?> "pF"
-
+    do pWImpl := SubExpressionParser >>= pTryCastToType WExpr
+    do pEImpl := SubExpressionParser >>= pTryCastToType EExpr
+    do pVImpl := SubExpressionParser >>= pTryCastToType VExpr
+    do pQImpl := SubExpressionParser >>= pTryCastToType QExpr
+    do pTImpl := SubExpressionParser >>= pTryCastToType TExpr
+    do pFImpl := SubExpressionParser >>= pTryCastToType FExpr
 
 let parseScript (sc: Script) =
     let ops = (sc.ToOps() |> Seq.toArray)
     let initialState = {ops=ops; position=ops.Length - 1}
-    run TokenParser.ASTParser initialState |> Result.map(fst)
+    run TokenParser.SubExpressionParser initialState |> Result.map(fst)
 
 let parseScriptUnsafe sc =
     match parseScript sc with
