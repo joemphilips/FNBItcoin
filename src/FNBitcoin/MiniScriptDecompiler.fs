@@ -409,8 +409,8 @@ module TokenParser =
                          |>> fun (rightF, leftE) ->
                              ETree(E.SwitchOrLeft(leftE.castEUnsafe(), rightF.castFUnsafe()))
 
-    let pESwitchOrRight = ((pToken EndIf) >>. pF .>> pToken Else)
-                          .>>. ((pE) .>> pToken NotIf)
+    let pESwitchOrRight = (pToken EndIf >>. pF .>> pToken Else)
+                          .>>. (pE .>> pToken NotIf)
                           |>> fun (rightF, leftE) ->
                               ETree(E.SwitchOrRight(leftE.castEUnsafe(), rightF.castFUnsafe()))
 
@@ -645,6 +645,8 @@ module TokenParser =
                                             pEThreshold
                                             pECheckMultisig
                                             pETime
+                                            pESwitchOrLeft
+                                            pESwitchOrRight
                                             pELikely
                                             pEUnlikely
                                             pECascadeAnd

@@ -235,6 +235,13 @@ let tests2 =
                     T.Time(1u)
                 )))
             roundTripFromMiniScript input
+        testCase "Case found by property tests: 7" <| fun _ ->
+            let input = MiniScript.fromASTUnsafe(TTree(
+                T.CastE(
+                        E.SwitchOrRight(E.Time(1u), F.Time(1u))
+                )))
+
+            roundTripFromMiniScript input
     ]
 
 let roundtripParserAndAST (parser: Parser<_, _>) (ast: AST) =
@@ -272,7 +279,7 @@ let deserializationTestWithParser =
                 VTree(V.CheckMultiSig(1u, longKeysList))
             let parser = TokenParser.pV
             roundtripParserAndAST parser input
-        ftestCase "Case found by property tests: 7_1" <| fun _ ->
+        testCase "Case found by property tests: 7_1" <| fun _ ->
             let input = 
                 WTree(W.CastE(E.CheckSig(keysList.[0])))
             let parser = TokenParser.pW
@@ -305,5 +312,10 @@ let deserializationTestWithParser =
             let input =
                 VTree(V.SwitchOrT(T.Time(1u), T.Time(1u)))
             let parser = TokenParser.pV
+            roundtripParserAndAST parser input
+        testCase "Case found by property tests: 9_1" <| fun _ ->
+            let input =
+                ETree(E.SwitchOrRight(E.Time(1u), F.Time(1u)))
+            let parser = TokenParser.pE
             roundtripParserAndAST parser input
     ]
