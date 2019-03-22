@@ -368,7 +368,10 @@ module TokenParser =
                       |>> fun (kws, east) ->
                         let k = (fst kws).Value :?> uint32
                         let e = east.castEUnsafe()
-                        let ws = (snd kws) |> List.toArray |> Array.map(fun ast -> ast.castWUnsafe())
+                        let ws = (snd kws)
+                                 |> List.toArray
+                                 |> Array.rev
+                                 |> Array.map(fun ast -> ast.castWUnsafe())
                         ETree(E.Threshold(k, e, ws))
                       ) <?> "Parser E.Threshold"
 
@@ -433,7 +436,10 @@ module TokenParser =
                       |>> fun (kws, east) ->
                         let k = (fst kws).Value :?> uint32
                         let e = east.castEUnsafe()
-                        let ws = (snd kws) |> List.toArray |> Array.map(fun ast -> ast.castWUnsafe())
+                        let ws = (snd kws)
+                                 |> List.toArray
+                                 |> Array.rev
+                                 |> Array.map(fun ast -> ast.castWUnsafe())
                         VTree(V.Threshold(k, e, ws))
 
     let pVCheckSig = ((pToken CheckSigVerify)
