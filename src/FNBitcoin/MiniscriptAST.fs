@@ -276,7 +276,7 @@ and F with
             sb.AppendFormat(" {0}", (EncodeUint m)) |> ignore
             for pk in pks do
                 sb.AppendFormat(" {0}", (pk.ToHex())) |> ignore
-            sb.AppendFormat(" {0:x} OP_CHECKMULTISIGVERIFY 1", pks.Length)
+            sb.AppendFormat(" {0} OP_CHECKMULTISIGVERIFY 1", (EncodeInt pks.Length))
         | Time t -> sb.AppendFormat(" {0} OP_CSV OP_0NOTEQUAL", (EncodeUint t))
         | HashEqual h -> 
             sb.AppendFormat
@@ -344,7 +344,7 @@ and V with
             sb.AppendFormat(" {0}", (EncodeUint m)) |> ignore
             for pk in pks do
                 sb.AppendFormat(" {0}", (pk.ToHex())) |> ignore
-            sb.AppendFormat(" {0} OP_CHECKMULTISIGVERIFY", pks.Length)
+            sb.AppendFormat(" {0} OP_CHECKMULTISIGVERIFY", (EncodeInt pks.Length))
         | Time t -> sb.AppendFormat(" {0:x} OP_CSV OP_DROP", (EncodeUint t))
         | HashEqual h -> 
             sb.AppendFormat

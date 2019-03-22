@@ -23,6 +23,8 @@ let keysList =
    keys
    |> List.map (PubKey)
    |> List.toArray
+
+let longKeysList = keysList.[0] |> Array.replicate 20
 // --------- AST <-> Script ---------
 let checkParseResult res expected =
     match res with
@@ -177,10 +179,11 @@ let roundtrip p =
     let m = CompiledNode.fromPolicy(p).compileUnsafe()
     roundTripFromMiniScript m
 
+let hash = uint256.Parse("59141e52303a755307114c2a5e6823010b3f1d586216742f396d4b06106e222c")
 [<Tests>]
 let tests2 =
     testList "Should convert Policy <-> AST <-> Script" [
-        ftestPropertyWithConfig config "Every possible MiniScript"  <| fun (p: Policy) ->
+        testPropertyWithConfig config "Every possible MiniScript"  <| fun (p: Policy) ->
             roundtrip p
         testCase "Case found by property tests: 1" <| fun _ ->
             let input = Policy.Or(Key(keysList.[0]), Policy.And(Policy.Time(2u), Policy.Time(1u)))
@@ -193,20 +196,80 @@ let tests2 =
             let m2 = run customParser customState
             Expect.isOk m2 "failed"
         testCase "Case found by property tests: 2" <| fun _ ->
-            let hash = uint256.Parse("59141e52303a755307114c2a5e6823010b3f1d586216742f396d4b06106e222c")
             let input = MiniScript.fromASTUnsafe(TTree(T.HashEqual(hash)))
             roundTripFromMiniScript input
         testCase "Case found by property tests: 3" <| fun _ ->
-            let hash = uint256.Parse("59141e52303a755307114c2a5e6823010b3f1d586216742f396d4b06106e222c")
             let input = MiniScript.fromASTUnsafe(
-                TTree(
-                    T.CastE(
-                        E.Threshold(
-                            1u,
-                            E.Time(4u),
-                            [|
-                                W.Time(7u)
-                            |]
-                            ))))
+                TTree(T.And(V.Time(1u), T.Time(1u))))
             roundTripFromMiniScript input
+
+        testCase "Case found by property tests: 4" <| fun _ ->
+            let input = MiniScript.fromASTUnsafe(TTree(
+                T.CastE(
+                    E.Threshold(
+                            1u,
+                            E.CheckSig(keysList.[0]),
+                            [| W.CheckSig(keysList.[0]) |]
+                            )
+                        )
+                    )
+                )
+            roundTripFromMiniScript input
+        testCase "Case found by property tests: 5" <| fun _ ->
+            let input = MiniScript.fromASTUnsafe(TTree(
+                T.CastE(
+                    E.Likely(
+                        F.Threshold(
+                            1u,
+                            E.CheckSig(keysList.[0]),
+                            [| W.CheckSig(keysList.[0]) |]
+                            )
+                        )
+                    ))
+                )
+            roundTripFromMiniScript input
+        testCase "Case found by property tests: 6" <| fun _ ->
+            let input = MiniScript.fromASTUnsafe(TTree(
+                T.And(
+                    V.CheckMultiSig(1u, longKeysList),
+                    T.Time(1u)
+                )))
+            roundTripFromMiniScript input
+    ]
+
+let roundtripParserAndAST (parser: Parser<_, _>) (ast: AST) =
+    let sc = ast.ToScript()
+    printfn "going to parse script %A\nit should be AST %A" sc ast
+    let ops = sc.ToOps() |> Seq.toArray
+    let initialState = {ops=ops;position=ops.Length - 1}
+    match run parser initialState with
+    | Ok r -> Expect.equal ast (fst r) "AST is not equal"
+    | Result.Error e -> failwithf "%A" e
+
+[<Tests>]
+let deserializationTestWithParser =
+    testList "deserialization test with parser" [
+        ftestCase "Case found by property tests: 5_2" <| fun _ ->
+            let input = 
+                    ETree(
+                        E.Likely(
+                            F.Time(1u)
+                    )
+                )
+            let parser = TokenParser.pE
+            roundtripParserAndAST parser input
+        testCase "Case found by property tests: 5_3" <| fun _ ->
+            let input = 
+                        FTree(F.Threshold(
+                            1u,
+                            E.CheckSig(keysList.[0]),
+                            [| W.CheckSig(keysList.[0]) |]
+                            ))
+            let parser = TokenParser.pF
+            roundtripParserAndAST parser input
+        testCase "Case found by property tests: 6_1" <| fun _ ->
+            let input = 
+                VTree(V.CheckMultiSig(1u, longKeysList))
+            let parser = TokenParser.pV
+            roundtripParserAndAST parser input
     ]

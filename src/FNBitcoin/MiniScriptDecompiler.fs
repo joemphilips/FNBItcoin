@@ -123,7 +123,7 @@ type Token with
         | Hash160 -> TokenCategory.Hash160
         | Sha256 -> TokenCategory.Sha256
         | Number _ -> TokenCategory.Number
-        | Hash160Hash _ -> TokenCategory.Number
+        | Hash160Hash _ -> TokenCategory.Hash160Hash
         | Sha256Hash _ -> TokenCategory.Sha256Hash
         | Pk _ -> TokenCategory.Pk
         | Any -> TokenCategory.Any
@@ -256,6 +256,8 @@ module TokenParser =
                     printfn "DEBUG: cat is %A\nactualCat is %A\n" cat actualCat
                     if cat = Any || cat = actualCat then
                         let newState = { state with position=state.position - 1 }
+                        let item = actualToken.GetItem()
+                        printfn "item was %A" item
                         Ok (actualToken.GetItem(), newState) 
                     else
                         let msg = sprintf "token is not the one expected \nactual: %A\nexpected: %A" actualCat cat
@@ -294,6 +296,7 @@ module TokenParser =
 
     let private multisigBind (expectedType: ASTType) (nAndPks: obj option * obj option list, maybeMObj: obj option) =
         let n = (fst nAndPks).Value :?> uint32
+        printfn "n and pks are %A" nAndPks
         let pks = (snd nAndPks)
                   |> List.rev
                   |> List.toArray
@@ -308,6 +311,7 @@ module TokenParser =
                 | _ -> failwith "unreachable!"
             else
                 let msg = (sprintf "Invalid Multisig Script\nn was %d but actual pubkey length was %d" n pks.Length)
+                printfn "%s" msg
                 Error(name, msg, state.position)
 
         {parseFn=innerFn; name=name}
@@ -361,7 +365,7 @@ module TokenParser =
 
     let pEThreshold = (((pToken Equal) >>. (pToken Number))
                       .>>. (many1 (pToken Add >>. pW))
-                      .>>. (pToken Any >>. pE)
+                      .>>. (pE)
                       |>> fun (kws, east) ->
                         let k = (fst kws).Value :?> uint32
                         let e = east.castEUnsafe()
@@ -390,7 +394,7 @@ module TokenParser =
                     |>> fun (fexpr) -> ETree(E.Unlikely(fexpr.castFUnsafe()))
 
     let pELikely = pLikelyPrefix
-                   .>> pToken If
+                   .>> pToken NotIf
                    |>> fun (fexpr) -> ETree(E.Likely(fexpr.castFUnsafe()))
 
     let pECascadeAnd = (pToken EndIf) >>. pF .>> pToken Else
@@ -426,7 +430,7 @@ module TokenParser =
 
     let pVThreshold = ((pToken EqualVerify) >>. (pToken Number))
                       .>>. (many1 (pToken Add >>. pW))
-                      .>>. (pToken Any >>. pE)
+                      .>>. (pE)
                       |>> fun (kws, east) ->
                         let k = (fst kws).Value :?> uint32
                         let e = east.castEUnsafe()
@@ -594,8 +598,11 @@ module TokenParser =
                 let rightAST = ast
 
                 match run SubExpressionParser state with
-                | Error e -> Error e
+                | Error e ->
+                    printfn "failed to find V Expr in postprocess. Got\n %A" e
+                    Error e
                 | Ok result ->
+                    printfn "post process result was %A" result
                     let leftAST, state = result
                     let leftV = leftAST.castVUnsafe()
                     match (rightAST.GetASTType()) with
