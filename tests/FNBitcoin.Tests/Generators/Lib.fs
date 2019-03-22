@@ -19,8 +19,8 @@ type Generators =
                     | Policy.Threshold (k, ps) ->
                         let shrinkThres (k, (ps: Policy[])) =
                             let k2 = if k = 1u then k else k - 1u
-                            let ps2 = ps.[0..(ps.Length - 2)]
-                            [Policy.Threshold(k2, ps2)]
+                            let ps2 = Arb.shrink(ps)
+                            ps2 |> Seq.toList |> List.map(fun p -> Policy.Threshold(k2, p))
                         let subexpr = ps |> Array.toList
                         if ps.Length = 1 then subexpr else shrinkThres(k, ps)
                     | Policy.And(p1, p2) -> [p1; p2]
