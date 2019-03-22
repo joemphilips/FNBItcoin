@@ -183,7 +183,7 @@ let hash = uint256.Parse("59141e52303a755307114c2a5e6823010b3f1d586216742f396d4b
 [<Tests>]
 let tests2 =
     testList "Should convert Policy <-> AST <-> Script" [
-        testPropertyWithConfig config "Every possible MiniScript"  <| fun (p: Policy) ->
+        ftestPropertyWithConfig config "Every possible MiniScript"  <| fun (p: Policy) ->
             roundtrip p
         testCase "Case found by property tests: 1" <| fun _ ->
             let input = Policy.Or(Key(keysList.[0]), Policy.And(Policy.Time(2u), Policy.Time(1u)))
@@ -249,7 +249,7 @@ let roundtripParserAndAST (parser: Parser<_, _>) (ast: AST) =
 [<Tests>]
 let deserializationTestWithParser =
     testList "deserialization test with parser" [
-        ftestCase "Case found by property tests: 5_2" <| fun _ ->
+        testCase "Case found by property tests: 5_2" <| fun _ ->
             let input = 
                     ETree(
                         E.Likely(
@@ -270,6 +270,40 @@ let deserializationTestWithParser =
         testCase "Case found by property tests: 6_1" <| fun _ ->
             let input = 
                 VTree(V.CheckMultiSig(1u, longKeysList))
+            let parser = TokenParser.pV
+            roundtripParserAndAST parser input
+        ftestCase "Case found by property tests: 7_1" <| fun _ ->
+            let input = 
+                WTree(W.CastE(E.CheckSig(keysList.[0])))
+            let parser = TokenParser.pW
+            roundtripParserAndAST parser input
+
+        testCase "Case found by property tests: 7_2" <| fun _ ->
+            let input =
+                WTree(W.CastE(E.SwitchOrRight(E.Time(1u), F.Time(1u))))
+
+            let parser = TokenParser.pW
+            roundtripParserAndAST parser input
+        testCase "Case found by property tests: 8_1" <| fun _ ->
+            let input =
+                FTree(F.SwitchOr(F.Time(1u), F.Time(1u)))
+
+            let parser = TokenParser.pF
+            roundtripParserAndAST parser input
+        testCase "Case found by property tests: 8_2" <| fun _ ->
+            let input =
+                VTree(V.SwitchOr(V.Time(1u), V.Time(1u)))
+
+            let parser = TokenParser.pV
+            roundtripParserAndAST parser input
+
+            let input =
+                TTree(T.SwitchOr(T.Time(1u), T.Time(1u)))
+            let parser = TokenParser.pT
+            roundtripParserAndAST parser input
+
+            let input =
+                VTree(V.SwitchOrT(T.Time(1u), T.Time(1u)))
             let parser = TokenParser.pV
             roundtripParserAndAST parser input
     ]

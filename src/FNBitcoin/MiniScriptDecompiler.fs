@@ -3,7 +3,6 @@ module FNBitcoin.MiniScriptDecompiler
 open NBitcoin
 open System
 open FNBitcoin.Utils.Parser
-open FNBitcoin.Utils
 open MiniScriptAST
 open Microsoft.FSharp.Reflection
 /// Subset of Bitcoin Script which is used in Miniscript
@@ -567,6 +566,7 @@ module TokenParser =
                 | Ok(Token.If)
                 | Ok(Token.NotIf)
                 | Ok(Token.Else) -> Ok(false)
+                | Ok(Token.ToAltStack) -> Ok(false)
                 | _ -> Ok(true)
 
             match ast.GetASTType() with
