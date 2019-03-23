@@ -180,6 +180,7 @@ let roundtrip p =
     roundTripFromMiniScript m
 
 let hash = uint256.Parse("59141e52303a755307114c2a5e6823010b3f1d586216742f396d4b06106e222c")
+
 [<Tests>]
 let tests2 =
     testList "Should convert Policy <-> AST <-> Script" [
@@ -195,9 +196,11 @@ let tests2 =
             let customState = {ops=ops; position=ops.Length - 1}
             let m2 = run customParser customState
             Expect.isOk m2 "failed"
+
         testCase "Case found by property tests: 2" <| fun _ ->
             let input = MiniScript.fromASTUnsafe(TTree(T.HashEqual(hash)))
             roundTripFromMiniScript input
+
         testCase "Case found by property tests: 3" <| fun _ ->
             let input = MiniScript.fromASTUnsafe(
                 TTree(T.And(V.Time(1u), T.Time(1u))))
@@ -240,6 +243,19 @@ let tests2 =
                 T.CastE(
                         E.SwitchOrRight(E.Time(1u), F.Time(1u))
                 )))
+            roundTripFromMiniScript input
+
+        testCase "Case found by property tests: 8" <| fun _ ->
+            let input = MiniScript.fromASTUnsafe(TTree(
+                T.And(
+                    V.Time(2u),
+                    T.CastE(E.Threshold(
+                        1u,
+                        E.Time(4u),
+                        [|W.Time(5u)|]
+                    ))
+                )
+            ))
 
             roundTripFromMiniScript input
     ]

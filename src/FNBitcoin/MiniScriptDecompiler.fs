@@ -262,6 +262,7 @@ module TokenParser =
                         let msg = sprintf "token is not the one expected \nactual: %A\nexpected: %A" actualCat cat
                         Error(name, msg, pos)
         {parseFn=innerFn; name=name}
+    let mutable pENoPostProcess, pENoPostProcessImpl = createParserForwardedToRef<AST, State>()
 
     let mutable pW, pWImpl = createParserForwardedToRef<AST, State>()
     let mutable pE, pEImpl = createParserForwardedToRef<AST, State>()
@@ -364,7 +365,7 @@ module TokenParser =
 
     let pEThreshold = (((pToken Equal) >>. (pToken Number))
                       .>>. (many1 (pToken Add >>. pW))
-                      .>>. (pE)
+                      .>>. (pENoPostProcess)
                       |>> fun (kws, east) ->
                         let k = (fst kws).Value :?> uint32
                         let e = east.castEUnsafe()
@@ -608,12 +609,16 @@ module TokenParser =
                     printfn "failed to find V Expr in postprocess. Got\n %A" e
                     Error e
                 | Ok result ->
-                    printfn "post process result was %A" result
                     let leftAST, state = result
                     let leftV = leftAST.castVUnsafe()
+                    printfn "After post process, result was\nleftAST: %A\n rightAST: %A\nstate: %A"
+                        leftAST rightAST state
                     match (rightAST.GetASTType()) with
                     | TExpr -> Ok(TTree(T.And(leftV, rightAST.castTUnsafe())), state)
-                    | EExpr -> Ok(TTree(T.And(leftV, rightAST.castTUnsafe())), state)
+                    | EExpr ->
+                        let res = Ok(TTree(T.And(leftV, rightAST.castTUnsafe())), state)
+                        printfn "result was: %A " res
+                        res
                     | QExpr -> Ok(QTree(Q.And(leftV, rightAST.castQUnsafe())), state)
                     | FExpr ->
                         match rightAST.castT() with
@@ -628,6 +633,7 @@ module TokenParser =
     let pTryCastToType (expected: ASTType) (ast: AST) =
         let name = "pIsTypeOf"
         let innerFn state =
+            printfn "trying to cast %A to %A" ast expected
             if ast.GetASTType() = expected then
                 Ok(ast, state)
             else if expected = TExpr && ast.IsT() then
@@ -637,19 +643,23 @@ module TokenParser =
                 Error(name, msg, state.position)
         {parseFn=innerFn; name=name}
 
+    do pENoPostProcessImpl := choice [
+        pECheckSig
+        pEParallelAnd
+        pEParallelOr
+        pEThreshold
+        pECheckMultisig
+        pETime
+        pESwitchOrLeft
+        pESwitchOrRight
+        pELikely
+        pEUnlikely
+        pECascadeAnd
+        ]
+
     do SubExpressionParserImpl := (choice [
                                             pWCheckSig; pWTime; pWCastE; pWHashEqual
-                                            pECheckSig
-                                            pEParallelAnd
-                                            pEParallelOr
-                                            pEThreshold
-                                            pECheckMultisig
-                                            pETime
-                                            pESwitchOrLeft
-                                            pESwitchOrRight
-                                            pELikely
-                                            pEUnlikely
-                                            pECascadeAnd
+                                            pENoPostProcess
                                             pVDelayedOr
                                             pVHashEqual
                                             pVThreshold
