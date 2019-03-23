@@ -13,30 +13,26 @@ type Policy =
     | And of Policy * Policy
     | Or of Policy * Policy
     | AsymmetricOr of Policy * Policy
+    override this.ToString() =
+        match this with
+        | Key k1 -> sprintf "pk(%s)" (string (k1.ToHex()))
+        | Multi(m, klist) -> 
+            klist
+            |> Seq.map (fun k -> string (k.ToHex()))
+            |> Seq.reduce (fun a b -> sprintf "%s,%s" a b)
+            |> sprintf "multi(%d,%s)" m
+        | Hash h -> sprintf "hash(%s)" (string (h.ToString()))
+        | Time t -> sprintf "time(%s)" (string (t.ToString()))
+        | Threshold(m, plist) -> 
+            plist
+            |> Array.map (fun p -> p.ToString())
+            |> Array.reduce (fun a b -> sprintf "%s,%s" a b)
+            |> sprintf "thres(%d,%s)" m
+        | And(p1, p2) -> sprintf "and(%s,%s)" (p1.ToString()) (p2.ToString())
+        | Or(p1, p2) -> sprintf "or(%s,%s)" (p1.ToString()) (p2.ToString())
+        | AsymmetricOr(p1, p2) -> 
+            sprintf "aor(%s,%s)" (p1.ToString()) (p2.ToString())
 
-// printer
-let rec printPolicy p =
-    match p with
-    | Key k1 -> sprintf "pk(%s)" (string (k1.ToHex()))
-    | Multi(m, klist) -> 
-        klist
-        |> Seq.map (fun k -> string (k.ToHex()))
-        |> Seq.reduce (fun a b -> sprintf "%s,%s" a b)
-        |> sprintf "multi(%d,%s)" m
-    | Hash h -> sprintf "hash(%s)" (string (h.ToString()))
-    | Time t -> sprintf "time(%s)" (string (t.ToString()))
-    | Threshold(m, plist) -> 
-        plist
-        |> Array.map (printPolicy)
-        |> Array.reduce (fun a b -> sprintf "%s,%s" a b)
-        |> sprintf "thres(%d,%s)" m
-    | And(p1, p2) -> sprintf "and(%s,%s)" (printPolicy p1) (printPolicy p2)
-    | Or(p1, p2) -> sprintf "or(%s,%s)" (printPolicy p1) (printPolicy p2)
-    | AsymmetricOr(p1, p2) -> 
-        sprintf "aor(%s,%s)" (printPolicy p1) (printPolicy p2)
-
-type Policy with
-    member this.print() = printPolicy this
 
 // parser
 let quoted = Regex(@"\((.*)\)")

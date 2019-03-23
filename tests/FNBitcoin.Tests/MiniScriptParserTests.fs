@@ -46,7 +46,7 @@ let tests =
                        Or
                            (Multi(1u, [| pk2; pk3 |]), 
                             AsymmetricOr(Key(pk1), Time(1000u))))
-              let actual = testdata1.print()
+              let actual = testdata1.ToString()
               let expected =
                   sprintf 
                       "and(pk(%s),or(multi(1,%s,%s),aor(pk(%s),time(1000))))" 
@@ -89,11 +89,11 @@ let tests =
               
               let data2 =
                   match data with
-                  | Policy p -> printPolicy p
+                  | Policy p -> p.ToString()
                   | _ -> failwith "Failed to parse policy"
               Expect.equal data data2 "Could not parse symmetrically"
 
           testPropertyWithConfig config "Should convert <Input string> <-> <Policy>" <| fun (p : Policy) -> 
-              match p.print() with
+              match p.ToString() with
               | Policy p2 -> Expect.equal p p2
               | _ -> failwith "Failed to convert bidirectionally" ]

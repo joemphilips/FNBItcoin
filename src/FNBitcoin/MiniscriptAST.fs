@@ -225,7 +225,8 @@ and W with
             sb.Append(" OP_CHECKSIG")
         | HashEqual h -> 
             sb.Append
-                (" OP_SWAP OP_SIZE OP_0NOTEQUAL OP_IF OP_SIZE 32 OP_EQUALVERIFY OP_SHA256") 
+                (sprintf " OP_SWAP OP_SIZE OP_0NOTEQUAL OP_IF OP_SIZE %s OP_EQUALVERIFY OP_SHA256"
+                    (EncodeInt 32)) 
             |> ignore
             sb.AppendFormat(" {0}", h.ToString()) |> ignore
             sb.Append(" OP_EQUALVERIFY 1 OP_ENDIF")
@@ -275,11 +276,11 @@ and F with
             sb.AppendFormat(" {0}", (EncodeUint m)) |> ignore
             for pk in pks do
                 sb.AppendFormat(" {0}", (pk.ToHex())) |> ignore
-            sb.AppendFormat(" {0:x} OP_CHECKMULTISIGVERIFY 1", pks.Length)
+            sb.AppendFormat(" {0} OP_CHECKMULTISIGVERIFY 1", (EncodeInt pks.Length))
         | Time t -> sb.AppendFormat(" {0} OP_CSV OP_0NOTEQUAL", (EncodeUint t))
         | HashEqual h -> 
             sb.AppendFormat
-                (" OP_SIZE 32 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUALVERIFY 1", h)
+                (" OP_SIZE 20 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUALVERIFY 1", h)
         | Threshold(k, e, ws) -> 
             e.Serialize(sb) |> ignore
             for w in ws do
@@ -343,11 +344,11 @@ and V with
             sb.AppendFormat(" {0}", (EncodeUint m)) |> ignore
             for pk in pks do
                 sb.AppendFormat(" {0}", (pk.ToHex())) |> ignore
-            sb.AppendFormat(" {0} OP_CHECKMULTISIGVERIFY", pks.Length)
+            sb.AppendFormat(" {0} OP_CHECKMULTISIGVERIFY", (EncodeInt pks.Length))
         | Time t -> sb.AppendFormat(" {0:x} OP_CSV OP_DROP", (EncodeUint t))
         | HashEqual h -> 
             sb.AppendFormat
-                (" OP_SIZE 32 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUALVERIFY", h)
+                (" OP_SIZE 20 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUALVERIFY", h)
         | Threshold(k, e, ws) -> 
             e.Serialize(sb) |> ignore
             for w in ws do
@@ -401,7 +402,7 @@ and T with
         | Time t -> sb.AppendFormat(" {0} OP_CSV", (EncodeUint t))
         | HashEqual h -> 
             sb.AppendFormat
-                (" OP_SIZE 32 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUAL", h)
+                (" OP_SIZE 20 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUAL", h)
         | And(l, r) -> 
             l.Serialize(sb) |> ignore
             r.Serialize(sb)

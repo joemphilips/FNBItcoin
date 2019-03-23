@@ -3,7 +3,6 @@ module FNBitcoin.MiniScriptDecompiler
 open NBitcoin
 open System
 open FNBitcoin.Utils.Parser
-open FNBitcoin.Utils
 open MiniScriptAST
 open Microsoft.FSharp.Reflection
 /// Subset of Bitcoin Script which is used in Miniscript
@@ -123,7 +122,7 @@ type Token with
         | Hash160 -> TokenCategory.Hash160
         | Sha256 -> TokenCategory.Sha256
         | Number _ -> TokenCategory.Number
-        | Hash160Hash _ -> TokenCategory.Number
+        | Hash160Hash _ -> TokenCategory.Hash160Hash
         | Sha256Hash _ -> TokenCategory.Sha256Hash
         | Pk _ -> TokenCategory.Pk
         | Any -> TokenCategory.Any
@@ -131,8 +130,8 @@ type Token with
 let private tryGetItemFromOp (op: Op) =
     let size = op.PushData.Length
     match size with
-    | 20 -> Ok(Token.Hash160Hash(uint160 (op.PushData)))
-    | 32 -> Ok(Token.Sha256Hash(uint256 (op.PushData)))
+    | 20 -> Ok(Token.Hash160Hash(uint160 (op.PushData, false)))
+    | 32 -> Ok(Token.Sha256Hash(uint256 (op.PushData, false)))
     | 33 -> 
         try 
             Ok(Token.Pk(NBitcoin.PubKey(op.PushData)))
@@ -174,6 +173,7 @@ let private castOpToToken (op : Op) : Result<Token, ParseException> =
     | OpcodeType.OP_VERIFY -> Ok(Token.Verify)
     | OpcodeType.OP_HASH160 -> Ok(Token.Hash160)
     | OpcodeType.OP_SHA256 -> Ok(Token.Sha256)
+    | OpcodeType.OP_ADD -> Ok(Token.Add)
     | OpcodeType.OP_0 -> Ok(Token.Number 0u)
     | OpcodeType.OP_1 -> Ok(Token.Number 1u)
     | OpcodeType.OP_2 -> Ok(Token.Number 2u)
@@ -191,7 +191,7 @@ let private castOpToToken (op : Op) : Result<Token, ParseException> =
     | OpcodeType.OP_14 -> Ok(Token.Number 14u)
     | OpcodeType.OP_15 -> Ok(Token.Number 15u)
     | OpcodeType.OP_16 -> Ok(Token.Number 16u)
-    | otherOp when (byte 0x01) < (byte otherOp) && (byte otherOp) < (byte 0x4B) -> 
+    | otherOp when (byte 0x01) <= (byte otherOp) && (byte otherOp) < (byte 0x4B) -> 
         tryGetItemFromOp op
     | otherOp when (byte 0x4B) <= (byte otherOp) -> 
         Error(ParseException(sprintf "MiniScript does not support pushdata bigger than 33. Got %s" (otherOp.ToString())))
@@ -243,7 +243,6 @@ module TokenParser =
             else
                 let pos = state.position
                 let ops = state.ops.[pos]
-                printfn "DEBUG: going to parse %s in position %d by parser (%s)" (ops.ToString()) (pos) name
                 let r = castOpToToken ops
                 match r with
                 | Error pex ->
@@ -251,14 +250,15 @@ module TokenParser =
                     Error(name, msg, pos)
                 | Ok actualToken ->
                     let actualCat = actualToken.GetCategory()
-                    printfn "DEBUG: cat is %A\nactualCat is %A\n" cat actualCat
                     if cat = Any || cat = actualCat then
                         let newState = { state with position=state.position - 1 }
+                        let item = actualToken.GetItem()
                         Ok (actualToken.GetItem(), newState) 
                     else
                         let msg = sprintf "token is not the one expected \nactual: %A\nexpected: %A" actualCat cat
                         Error(name, msg, pos)
         {parseFn=innerFn; name=name}
+    let mutable pENoPostProcess, pENoPostProcessImpl = createParserForwardedToRef<AST, State>()
 
     let mutable pW, pWImpl = createParserForwardedToRef<AST, State>()
     let mutable pE, pEImpl = createParserForwardedToRef<AST, State>()
@@ -358,11 +358,14 @@ module TokenParser =
 
     let pEThreshold = (((pToken Equal) >>. (pToken Number))
                       .>>. (many1 (pToken Add >>. pW))
-                      .>>. (pToken Any >>. pE)
+                      .>>. (pENoPostProcess)
                       |>> fun (kws, east) ->
                         let k = (fst kws).Value :?> uint32
                         let e = east.castEUnsafe()
-                        let ws = (snd kws) |> List.toArray |> Array.map(fun ast -> ast.castWUnsafe())
+                        let ws = (snd kws)
+                                 |> List.toArray
+                                 |> Array.rev
+                                 |> Array.map(fun ast -> ast.castWUnsafe())
                         ETree(E.Threshold(k, e, ws))
                       ) <?> "Parser E.Threshold"
 
@@ -387,7 +390,7 @@ module TokenParser =
                     |>> fun (fexpr) -> ETree(E.Unlikely(fexpr.castFUnsafe()))
 
     let pELikely = pLikelyPrefix
-                   .>> pToken If
+                   .>> pToken NotIf
                    |>> fun (fexpr) -> ETree(E.Likely(fexpr.castFUnsafe()))
 
     let pECascadeAnd = (pToken EndIf) >>. pF .>> pToken Else
@@ -400,8 +403,8 @@ module TokenParser =
                          |>> fun (rightF, leftE) ->
                              ETree(E.SwitchOrLeft(leftE.castEUnsafe(), rightF.castFUnsafe()))
 
-    let pESwitchOrRight = ((pToken EndIf) >>. pF .>> pToken Else)
-                          .>>. ((pE) .>> pToken NotIf)
+    let pESwitchOrRight = (pToken EndIf >>. pF .>> pToken Else)
+                          .>>. (pE .>> pToken NotIf)
                           |>> fun (rightF, leftE) ->
                               ETree(E.SwitchOrRight(leftE.castEUnsafe(), rightF.castFUnsafe()))
 
@@ -409,7 +412,6 @@ module TokenParser =
     let pVDelayedOr = (((pToken CheckSigVerify)
                       >>. (pToken EndIf) >>. pQ) .>>. (pToken Else >>. pQ .>> pToken If)
                       |>> fun (q1, q2) -> 
-                          printfn "finished pVDelaydOr with %A %A" q2 q1
                           VTree(V.DelayedOr(q2.castQUnsafe(), q1.castQUnsafe()))
                       ) <?> "P.VDelayedOr"
 
@@ -423,11 +425,14 @@ module TokenParser =
 
     let pVThreshold = ((pToken EqualVerify) >>. (pToken Number))
                       .>>. (many1 (pToken Add >>. pW))
-                      .>>. (pToken Any >>. pE)
+                      .>>. (pE)
                       |>> fun (kws, east) ->
                         let k = (fst kws).Value :?> uint32
                         let e = east.castEUnsafe()
-                        let ws = (snd kws) |> List.toArray |> Array.map(fun ast -> ast.castWUnsafe())
+                        let ws = (snd kws)
+                                 |> List.toArray
+                                 |> Array.rev
+                                 |> Array.map(fun ast -> ast.castWUnsafe())
                         VTree(V.Threshold(k, e, ws))
 
     let pVCheckSig = ((pToken CheckSigVerify)
@@ -472,11 +477,12 @@ module TokenParser =
                |>> fun (l, r) -> QTree(Q.Or(r.castQUnsafe(), l.castQUnsafe()))
     // ---- T -------
 
-    let pTHashEqual = (((pToken Sha256Hash)
-                       .>> (pToken Sha256)
-                       .>> (pToken EqualVerify)
-                       .>> (pNumberN 32u)
-                       .>> (pToken Size))
+    let pTHashEqual = ((pToken Equal
+                       >>. pToken Sha256Hash
+                       .>> pToken Sha256
+                       .>> pToken EqualVerify
+                       .>> pNumberN 32u
+                       .>> pToken Size)
                        |>> fun maybeHash -> TTree(T.HashEqual(maybeHash.Value :?> uint256)))
                        <?> "Parser T.HashEqual"
 
@@ -559,39 +565,39 @@ module TokenParser =
                 | Ok(Token.If)
                 | Ok(Token.NotIf)
                 | Ok(Token.Else) -> Ok(false)
+                | Ok(Token.ToAltStack) -> Ok(false)
                 | _ -> Ok(true)
 
             match ast.GetASTType() with
             | TExpr
             | VExpr
             | EExpr 
-            | QExpr ->
-                checkLastOp state
+            | QExpr
             | FExpr ->
-                match ast.castT() with
-                | Ok _ -> checkLastOp state
-                | Error _ -> Ok(false)
+                checkLastOp state
             | _ -> Ok(false)
 
     let postProcess (ast: AST) =
         let name = "postProcess"
-        printfn "\n--------Should we post process for :\n%A " ast
         let innerFn state =
             match shouldPostProcess(ast, state) with
-            | Error e -> Error e
-            | Ok(false) -> Ok((ast), state)
+            | Error e ->
+                Error e
+            | Ok(false) ->
+                Ok((ast), state)
             | Ok(true) ->
-                printfn "\n--------post processing with state:\n%A " state
                 let rightAST = ast
 
                 match run SubExpressionParser state with
-                | Error e -> Error e
+                | Error e ->
+                    Error e
                 | Ok result ->
                     let leftAST, state = result
                     let leftV = leftAST.castVUnsafe()
                     match (rightAST.GetASTType()) with
                     | TExpr -> Ok(TTree(T.And(leftV, rightAST.castTUnsafe())), state)
-                    | EExpr -> Ok(TTree(T.And(leftV, rightAST.castTUnsafe())), state)
+                    | EExpr ->
+                        Ok(TTree(T.And(leftV, rightAST.castTUnsafe())), state)
                     | QExpr -> Ok(QTree(Q.And(leftV, rightAST.castQUnsafe())), state)
                     | FExpr ->
                         match rightAST.castT() with
@@ -602,46 +608,63 @@ module TokenParser =
 
         {parseFn=innerFn; name = name}
 
-    do SubExpressionParserImpl := choice [pW; pE; pQ; pV; pT; pF]
+    /// validate AST is a specific type
+    let pTryCastToType (expected: ASTType) (ast: AST) =
+        let name = "pIsTypeOf"
+        let innerFn state =
+            if ast.GetASTType() = expected then
+                Ok(ast, state)
+            else if expected = TExpr && ast.IsT() then
+                Ok(TTree(ast.castTUnsafe()), state)
+            else
+                let msg = sprintf "AST is not the expected type\nexpected: %A\nactual: %A" expected ast
+                Error(name, msg, state.position)
+        {parseFn=innerFn; name=name}
 
-    let ASTParser = (SubExpressionParser >>= postProcess) <?> "ASTParser"
+    do pENoPostProcessImpl := choice [
+        pECheckSig
+        pEParallelAnd
+        pEParallelOr
+        pEThreshold
+        pECheckMultisig
+        pETime
+        pESwitchOrLeft
+        pESwitchOrRight
+        pELikely
+        pEUnlikely
+        pECascadeAnd
+        ]
 
-    do pWImpl := (choice [pWCheckSig; pWTime; pWCastE; pWHashEqual] >>= postProcess) <?> "pW"
-    do pEImpl := (choice [pECheckSig
-                          pEParallelAnd
-                          pEParallelOr
-                          pEThreshold
-                          pECheckMultisig
-                          pETime
-                          pELikely
-                          pEUnlikely
-                          pECascadeAnd
-                          ]
-                      >>= postProcess) <?> "pE"
-    do pVImpl := (choice [pVDelayedOr
-                          pVHashEqual
-                          pVThreshold
-                          pVCheckSig
-                          pVCheckMultisig
-                          pVTime
-                          pVSwitchOr
-                          pVCascadeOr
-                          pVSwitchOrT
-                          ]
-                      >>= postProcess) <?> "pV"
-    do pQImpl := (choice [pQPubKey; pQOr] >>= postProcess) <?> "pQ"
-    do pTImpl := (choice [pTHashEqual; pTDelayedOr; pTTime; pTSwitchOr; pTCascadeOr] >>= postProcess) <?> "pT"
-    do pFImpl := (choice [pFTime
-                          pFSwitchOr
-                          pFFromV
-                          ]
-                      >>= postProcess) <?> "pF"
+    do SubExpressionParserImpl := (choice [
+                                            pWCheckSig; pWTime; pWCastE; pWHashEqual
+                                            pENoPostProcess
+                                            pVDelayedOr
+                                            pVHashEqual
+                                            pVThreshold
+                                            pVCheckSig
+                                            pVCheckMultisig
+                                            pVTime
+                                            pVSwitchOr
+                                            pVCascadeOr
+                                            pVSwitchOrT
+                                            pQPubKey; pQOr
+                                            pTHashEqual; pTDelayedOr; pTTime; pTSwitchOr; pTCascadeOr
+                                            pFTime
+                                            pFSwitchOr
+                                            pFFromV
+                                         ] >>= postProcess) <?> "SubexpressionParser"
 
+    do pWImpl := SubExpressionParser >>= pTryCastToType WExpr
+    do pEImpl := SubExpressionParser >>= pTryCastToType EExpr
+    do pVImpl := SubExpressionParser >>= pTryCastToType VExpr
+    do pQImpl := SubExpressionParser >>= pTryCastToType QExpr
+    do pTImpl := SubExpressionParser >>= pTryCastToType TExpr
+    do pFImpl := SubExpressionParser >>= pTryCastToType FExpr
 
 let parseScript (sc: Script) =
     let ops = (sc.ToOps() |> Seq.toArray)
     let initialState = {ops=ops; position=ops.Length - 1}
-    run TokenParser.ASTParser initialState |> Result.map(fst)
+    run TokenParser.SubExpressionParser initialState |> Result.map(fst)
 
 let parseScriptUnsafe sc =
     match parseScript sc with
