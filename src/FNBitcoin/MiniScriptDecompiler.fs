@@ -243,20 +243,16 @@ module TokenParser =
             else
                 let pos = state.position
                 let ops = state.ops.[pos]
-                printfn "DEBUG: going to parse %s in position %d by parser (%s)" (ops.ToString()) (pos) name
                 let r = castOpToToken ops
-                printfn "DEBUG: after casting it was %A" r
                 match r with
                 | Error pex ->
                     let msg = sprintf "opcode %s is not supported by MiniScript %s" ops.Name pex.Message
                     Error(name, msg, pos)
                 | Ok actualToken ->
                     let actualCat = actualToken.GetCategory()
-                    printfn "DEBUG: cat is %A\nactualCat is %A\n" cat actualCat
                     if cat = Any || cat = actualCat then
                         let newState = { state with position=state.position - 1 }
                         let item = actualToken.GetItem()
-                        printfn "item was %A" item
                         Ok (actualToken.GetItem(), newState) 
                     else
                         let msg = sprintf "token is not the one expected \nactual: %A\nexpected: %A" actualCat cat
@@ -284,7 +280,6 @@ module TokenParser =
             let name = sprintf "number validator %d" n
             let innerFn state =
                 let actual = maybeNumberObj.Value :?> uint32
-                printfn "expected number was \n%d\n actual:%d" n actual
                 if actual = n then
                     Ok(n, state)
                 else
@@ -296,7 +291,6 @@ module TokenParser =
 
     let private multisigBind (expectedType: ASTType) (nAndPks: obj option * obj option list, maybeMObj: obj option) =
         let n = (fst nAndPks).Value :?> uint32
-        printfn "n and pks are %A" nAndPks
         let pks = (snd nAndPks)
                   |> List.rev
                   |> List.toArray
@@ -311,7 +305,6 @@ module TokenParser =
                 | _ -> failwith "unreachable!"
             else
                 let msg = (sprintf "Invalid Multisig Script\nn was %d but actual pubkey length was %d" n pks.Length)
-                printfn "%s" msg
                 Error(name, msg, state.position)
 
         {parseFn=innerFn; name=name}
@@ -419,7 +412,6 @@ module TokenParser =
     let pVDelayedOr = (((pToken CheckSigVerify)
                       >>. (pToken EndIf) >>. pQ) .>>. (pToken Else >>. pQ .>> pToken If)
                       |>> fun (q1, q2) -> 
-                          printfn "finished pVDelaydOr with %A %A" q2 q1
                           VTree(V.DelayedOr(q2.castQUnsafe(), q1.castQUnsafe()))
                       ) <?> "P.VDelayedOr"
 
@@ -587,29 +579,21 @@ module TokenParser =
 
     let postProcess (ast: AST) =
         let name = "postProcess"
-        printfn "\n--------Should we post process for :\n%A " ast
         let innerFn state =
             match shouldPostProcess(ast, state) with
             | Error e ->
-                printfn "no we got error %A" e
                 Error e
             | Ok(false) ->
-                printfn "no we don't have to"
                 Ok((ast), state)
             | Ok(true) ->
-                printfn "yes we should"
-                printfn "\n--------post processing with state:\n%A " state
                 let rightAST = ast
 
                 match run SubExpressionParser state with
                 | Error e ->
-                    printfn "failed to find V Expr in postprocess. Got\n %A" e
                     Error e
                 | Ok result ->
                     let leftAST, state = result
                     let leftV = leftAST.castVUnsafe()
-                    printfn "After post process, result was\nleftAST: %A\n rightAST: %A\nstate: %A"
-                        leftAST rightAST state
                     match (rightAST.GetASTType()) with
                     | TExpr -> Ok(TTree(T.And(leftV, rightAST.castTUnsafe())), state)
                     | EExpr ->
@@ -628,7 +612,6 @@ module TokenParser =
     let pTryCastToType (expected: ASTType) (ast: AST) =
         let name = "pIsTypeOf"
         let innerFn state =
-            printfn "trying to cast %A to %A" ast expected
             if ast.GetASTType() = expected then
                 Ok(ast, state)
             else if expected = TExpr && ast.IsT() then

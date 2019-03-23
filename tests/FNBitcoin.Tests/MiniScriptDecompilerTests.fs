@@ -43,7 +43,6 @@ let tests =
                                         E.CheckSig(pk), W.Time(1u))
                                     )
                                 let sc = boolAndWE.ToScript()
-                                printfn "going to parse %A"  sc
                                 let res = FNBitcoin.MiniScriptDecompiler.parseScript sc
                                 checkParseResult res boolAndWE
 
@@ -53,7 +52,6 @@ let tests =
                                 let pk2 = PubKey(keys.[1])
                                 let delayedOrV = VTree(V.DelayedOr(Q.Pubkey(pk), Q.Pubkey(pk2)))
                                 let sc = delayedOrV.ToScript()
-                                printfn "going to parse %A" sc
                                 let res = FNBitcoin.MiniScriptDecompiler.parseScript sc
                                 checkParseResult res delayedOrV
 
@@ -171,7 +169,6 @@ let config =
 
 let roundTripFromMiniScript (m: MiniScript) =
     let sc = m.ToScript()
-    printfn "going to decompile %A: It should be %A" sc m
     let m2 = MiniScript.fromScriptUnsafe sc
     Expect.equal m2 m "failed"
 
@@ -195,7 +192,6 @@ let tests2 =
             let input = Policy.Or(Key(keysList.[0]), Policy.And(Policy.Time(2u), Policy.Time(1u)))
             let m = CompiledNode.fromPolicy(input).compileUnsafe()
             let sc = m.ToScript()
-            printfn "going to decompile %A: It should be %A" sc m
             let customParser = TokenParser.pT
             let ops = sc.ToOps() |> Seq.toArray
             let customState = {ops=ops; position=ops.Length - 1}
@@ -281,7 +277,6 @@ let tests2 =
 
 let roundtripParserAndAST (parser: Parser<_, _>) (ast: AST) =
     let sc = ast.ToScript()
-    printfn "going to parse script %A\nit should be AST %A" sc ast
     let ops = sc.ToOps() |> Seq.toArray
     let initialState = {ops=ops;position=ops.Length - 1}
     match run parser initialState with
