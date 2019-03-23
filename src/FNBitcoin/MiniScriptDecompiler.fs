@@ -580,12 +580,9 @@ module TokenParser =
             | TExpr
             | VExpr
             | EExpr 
-            | QExpr ->
-                checkLastOp state
+            | QExpr
             | FExpr ->
-                match ast.castT() with
-                | Ok _ -> checkLastOp state
-                | Error _ -> Ok(false)
+                checkLastOp state
             | _ -> Ok(false)
 
     let postProcess (ast: AST) =
@@ -616,9 +613,7 @@ module TokenParser =
                     match (rightAST.GetASTType()) with
                     | TExpr -> Ok(TTree(T.And(leftV, rightAST.castTUnsafe())), state)
                     | EExpr ->
-                        let res = Ok(TTree(T.And(leftV, rightAST.castTUnsafe())), state)
-                        printfn "result was: %A " res
-                        res
+                        Ok(TTree(T.And(leftV, rightAST.castTUnsafe())), state)
                     | QExpr -> Ok(QTree(Q.And(leftV, rightAST.castQUnsafe())), state)
                     | FExpr ->
                         match rightAST.castT() with

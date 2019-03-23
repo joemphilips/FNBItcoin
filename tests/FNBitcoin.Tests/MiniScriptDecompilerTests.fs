@@ -166,8 +166,8 @@ let tests =
 // --------- Policy <-> AST <-> Script ---------
 let config =
     { FsCheckConfig.defaultConfig with arbitrary = [ typeof<Generators> ]
-                                       maxTest = 30
-                                       endSize = 32 }
+                                       maxTest = 400
+                                       endSize = 8 }
 
 let roundTripFromMiniScript (m: MiniScript) =
     let sc = m.ToScript()
@@ -258,6 +258,14 @@ let tests2 =
             ))
 
             roundTripFromMiniScript input
+        testCase "Case found by property tests: 9" <| fun _ ->
+            let input = MiniScript.fromASTUnsafe(TTree(
+                T.CastE(
+                    E.Likely(F.And(V.Time(2u), F.Time(2u)))
+                )
+            ))
+
+            roundTripFromMiniScript input
     ]
 
 let roundtripParserAndAST (parser: Parser<_, _>) (ast: AST) =
@@ -329,9 +337,14 @@ let deserializationTestWithParser =
                 VTree(V.SwitchOrT(T.Time(1u), T.Time(1u)))
             let parser = TokenParser.pV
             roundtripParserAndAST parser input
-        testCase "Case found by property tests: 9_1" <| fun _ ->
+        testCase "Case found by property tests: 8_3" <| fun _ ->
             let input =
                 ETree(E.SwitchOrRight(E.Time(1u), F.Time(1u)))
             let parser = TokenParser.pE
+            roundtripParserAndAST parser input
+        testCase "Case found by property tests: 9_2" <| fun _ ->
+            let input =
+                FTree(F.And(V.Time(2u), F.Time(2u)))
+            let parser = TokenParser.pF
             roundtripParserAndAST parser input
     ]
