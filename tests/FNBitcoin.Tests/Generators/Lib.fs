@@ -10,7 +10,7 @@ type Generators =
             override this.Generator = policy
             // TODO: This shrinker is far from ideal
             override this.Shrinker(p: Policy) =
-                let shrinkPolicy p =
+                let rec shrinkPolicy p =
                     match p with
                     | Key k -> []
                     | Multi(m, pks) -> [Multi(1u, pks.[0..0]); Multi(1u, pks.[pks.Length-2..pks.Length-1]); Policy.Key pks.[0]]
@@ -23,9 +23,24 @@ type Generators =
                             ps2 |> Seq.toList |> List.map(fun p -> Policy.Threshold(k2, p))
                         let subexpr = ps |> Array.toList
                         if ps.Length = 1 then subexpr else shrinkThres(k, ps)
-                    | Policy.And(p1, p2) -> [p1; p2]
-                    | Policy.Or(p1, p2) -> [p1; p2]
-                    | Policy.AsymmetricOr(p1, p2) -> [p1; p2]
+                    | Policy.And(p1, p2) ->
+                        let shrinkedAnd = shrinkNested Policy.And p1 p2
+                        List.concat[shrinkedAnd; [p1; p2;]]
+                    | Policy.Or(p1, p2) ->
+                        let shrinkedOr = shrinkNested Policy.Or p1 p2
+                        List.concat[shrinkedOr; [p1; p2;]]
+                    | Policy.AsymmetricOr(p1, p2) ->
+                        let shrinkedAOr = shrinkNested Policy.AsymmetricOr p1 p2
+                        List.concat[shrinkedAOr; [p1; p2;]]
+
+                /// Helper for shrinking nested types
+                and shrinkNested expectedType p1 p2 =
+                    let shrinkedSub1 = shrinkPolicy p1
+                    let shrinkedSub2 = shrinkPolicy p2
+                    shrinkedSub1
+                    |> List.collect(fun p1e -> shrinkedSub2
+                                               |> List.map(fun p2e -> p1e, p2e))
+                    |> List.map expectedType
 
                 shrinkPolicy p |> List.toSeq
         }
