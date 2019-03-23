@@ -9,6 +9,8 @@ type Generators =
         { new Arbitrary<Policy>() with
             override this.Generator = policy
             // TODO: This shrinker is far from ideal
+            // 1. nested shrinking does not work well
+            // 2. Must use Seq instead of List
             override this.Shrinker(p: Policy) =
                 let rec shrinkPolicy p =
                     match p with
