@@ -4,7 +4,7 @@ open NBitcoin
 open System
 open FNBitcoin.Utils.Parser
 open MiniScriptAST
-open Microsoft.FSharp.Reflection
+
 /// Subset of Bitcoin Script which is used in Miniscript
 type Token =
     | BoolAnd
