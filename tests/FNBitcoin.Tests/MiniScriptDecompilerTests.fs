@@ -3,6 +3,7 @@ module MiniScriptDecompilerTests
 open Expecto
 open Expecto.Logging
 open NBitcoin
+open FNBitcoin.Utils
 open FNBitcoin.MiniScriptParser
 open FNBitcoin.Tests.Generators
 open FNBitcoin.MiniScriptAST
@@ -40,7 +41,7 @@ let tests =
                                 let pk2 = PubKey(keys.[1])
                                 let boolAndWE = ETree(
                                     E.ParallelAnd(
-                                        E.CheckSig(pk), W.Time(1u))
+                                        E.CheckSig(pk), W.Time(!> 1u))
                                     )
                                 let sc = boolAndWE.ToScript()
                                 let res = FNBitcoin.MiniScriptDecompiler.parseScript sc
@@ -103,7 +104,7 @@ let tests =
                                       (V.CheckMultiSig
                                           (2u, 
                                            keysList.[2..3]), 
-                                       T.Time(10000u))
+                                       T.Time(!> 10000u))
                                       ))
 
                                let policy3_2 =
@@ -127,7 +128,7 @@ let tests =
                                                            (2u, 
                                                             keysList.[2..3]), 
                                                        T.Time
-                                                           (10000u)))))
+                                                           (!> 10000u)))))
                                let policy3_1 =
                                    sprintf 
                                        "2 %s %s 2 OP_CHECKMULTISIG" 
@@ -140,7 +141,7 @@ let tests =
 
                                let r4 =
                                    MiniScript.fromAST 
-                                       (TTree(T.Time(921u)))
+                                       (TTree(T.Time(!> 921u)))
                                let s4 = Script("9903 OP_CSV")
                                roundtrip r4 s4
 
@@ -186,10 +187,11 @@ let tests2 =
         /// specifically, the case is when there is a nested `and`.
         /// `and(and(1, 2), 3)` is semantically equal to `and(1, and(2, 3))`
         /// But the assertion will fail, so leave it untested.
+        // TODO: (Ideally, we should have `CustomComparison` for AST and Policy)
         ptestPropertyWithConfig config "Every possible MiniScript"  <| fun (p: Policy) ->
             roundtrip p
         testCase "Case found by property tests: 1" <| fun _ ->
-            let input = Policy.Or(Key(keysList.[0]), Policy.And(Policy.Time(2u), Policy.Time(1u)))
+            let input = Policy.Or(Key(keysList.[0]), Policy.And(Policy.Time(!> 2u), Policy.Time(!> 1u)))
             let m = CompiledNode.fromPolicy(input).compileUnsafe()
             let sc = m.ToScript()
             let customParser = TokenParser.pT
@@ -236,24 +238,24 @@ let tests2 =
             let input = MiniScript.fromASTUnsafe(TTree(
                 T.And(
                     V.CheckMultiSig(1u, longKeysList),
-                    T.Time(1u)
+                    T.Time(!> 1u)
                 )))
             roundTripFromMiniScript input
         testCase "Case found by property tests: 7" <| fun _ ->
             let input = MiniScript.fromASTUnsafe(TTree(
                 T.CastE(
-                        E.SwitchOrRight(E.Time(1u), F.Time(1u))
+                        E.SwitchOrRight(E.Time(!> 1u), F.Time(!> 1u))
                 )))
             roundTripFromMiniScript input
 
         testCase "Case found by property tests: 8" <| fun _ ->
             let input = MiniScript.fromASTUnsafe(TTree(
                 T.And(
-                    V.Time(2u),
+                    V.Time(!> 2u),
                     T.CastE(E.Threshold(
                         1u,
-                        E.Time(4u),
-                        [|W.Time(5u)|]
+                        E.Time(!> 4u),
+                        [|W.Time(!> 5u)|]
                     ))
                 )
             ))
@@ -262,14 +264,14 @@ let tests2 =
         testCase "Case found by property tests: 9" <| fun _ ->
             let input = MiniScript.fromASTUnsafe(TTree(
                 T.CastE(
-                    E.Likely(F.And(V.Time(2u), F.Time(2u)))
+                    E.Likely(F.And(V.Time(!> 2u), F.Time(!> 2u)))
                 )
             ))
 
             roundTripFromMiniScript input
         ptestCase "Can NOT handle nested And" <| fun _ ->
             let input = MiniScript.fromASTUnsafe(TTree(
-                T.And(V.Time(3u), T.And(V.Time(4u), T.Time(4u)))
+                T.And(V.Time(!> 3u), T.And(V.Time(!> 4u), T.Time(!> 4u)))
             ))
 
             roundTripFromMiniScript input
@@ -290,7 +292,7 @@ let deserializationTestWithParser =
             let input = 
                     ETree(
                         E.Likely(
-                            F.Time(1u)
+                            F.Time(!> 1u)
                     )
                 )
             let parser = TokenParser.pE
@@ -317,40 +319,40 @@ let deserializationTestWithParser =
 
         testCase "Case found by property tests: 7_2" <| fun _ ->
             let input =
-                WTree(W.CastE(E.SwitchOrRight(E.Time(1u), F.Time(1u))))
+                WTree(W.CastE(E.SwitchOrRight(E.Time(!> 1u), F.Time(!> 1u))))
 
             let parser = TokenParser.pW
             roundtripParserAndAST parser input
         testCase "Case found by property tests: 8_1" <| fun _ ->
             let input =
-                FTree(F.SwitchOr(F.Time(1u), F.Time(1u)))
+                FTree(F.SwitchOr(F.Time(!> 1u), F.Time(!> 1u)))
 
             let parser = TokenParser.pF
             roundtripParserAndAST parser input
         testCase "Case found by property tests: 8_2" <| fun _ ->
             let input =
-                VTree(V.SwitchOr(V.Time(1u), V.Time(1u)))
+                VTree(V.SwitchOr(V.Time(!> 1u), V.Time(!> 1u)))
 
             let parser = TokenParser.pV
             roundtripParserAndAST parser input
 
             let input =
-                TTree(T.SwitchOr(T.Time(1u), T.Time(1u)))
+                TTree(T.SwitchOr(T.Time(!> 1u), T.Time(!> 1u)))
             let parser = TokenParser.pT
             roundtripParserAndAST parser input
 
             let input =
-                VTree(V.SwitchOrT(T.Time(1u), T.Time(1u)))
+                VTree(V.SwitchOrT(T.Time(!> 1u), T.Time(!> 1u)))
             let parser = TokenParser.pV
             roundtripParserAndAST parser input
         testCase "Case found by property tests: 8_3" <| fun _ ->
             let input =
-                ETree(E.SwitchOrRight(E.Time(1u), F.Time(1u)))
+                ETree(E.SwitchOrRight(E.Time(!> 1u), F.Time(!> 1u)))
             let parser = TokenParser.pE
             roundtripParserAndAST parser input
         testCase "Case found by property tests: 9_2" <| fun _ ->
             let input =
-                FTree(F.And(V.Time(2u), F.Time(2u)))
+                FTree(F.And(V.Time(!> 2u), F.Time(!> 2u)))
             let parser = TokenParser.pF
             roundtripParserAndAST parser input
     ]

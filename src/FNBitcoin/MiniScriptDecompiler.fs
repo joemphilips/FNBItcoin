@@ -198,26 +198,6 @@ let private castOpToToken (op : Op) : Result<Token, ParseException> =
     | unknown ->
         Error(ParseException(sprintf "Unknown Opcode to MiniScript %s" (unknown.ToString())))
 
-let private resultFolder (acc : Result<'a seq, ParseException>) 
-    (item : Result<'a, 'c>) =
-    match acc, item with
-    | Ok x, Ok y -> 
-        Ok(seq { 
-               yield! x
-               yield y
-           })
-    | Error x, Ok y -> Error x
-    | Ok x, Error y -> Error y
-    | Error x, Error y -> Error(ParseException((y.ToString()), x))
-
-// Script -> Token list
-let tokenize (script : Script) : Result<Token list, ParseException> =
-    let ops = script.ToOps() |> Seq.map castOpToToken
-    (Ok Seq.empty, ops)
-    ||> Seq.fold resultFolder
-    |> Result.map (fun ts -> Seq.toList ts) // we have to collect the elements since parser requires
-
-
 type State = {
     ops: Op[]
     position: int

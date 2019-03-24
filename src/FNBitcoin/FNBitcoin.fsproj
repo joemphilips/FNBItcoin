@@ -18,6 +18,7 @@
     <Compile Include="MiniScriptDecompiler.fs" />
     <Compile Include="MiniScript.fs" />
     <Compile Include="MiniScriptCompiler.fs" />
+    <Compile Include="Satisfy.fs" />
     <Compile Include="Contract.fs" />
     <Compile Include="Library.fs" />
   </ItemGroup>

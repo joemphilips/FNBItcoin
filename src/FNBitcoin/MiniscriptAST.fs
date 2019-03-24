@@ -1,9 +1,8 @@
 module FNBitcoin.MiniScriptAST
 
 open NBitcoin
-open System.Text
-open FNBitcoin.MiniScriptParser
 open FNBitcoin.Utils
+open System.Text
 
 // TODO: Use unativeint instead of uint?
 
@@ -13,7 +12,7 @@ open FNBitcoin.Utils
 type E =
     | CheckSig of PubKey
     | CheckMultiSig of uint32 * PubKey []
-    | Time of uint32
+    | Time of LockTime
     | Threshold of (uint32 * E * W [])
     | ParallelAnd of (E * W)
     | CascadeAnd of (E * F)
@@ -30,7 +29,7 @@ type E =
 and W =
     | CheckSig of PubKey
     | HashEqual of uint256
-    | Time of uint32
+    | Time of LockTime
     | CastE of E
 
 /// "Q"ueue. Similar to F, but leaves public key buffer on the stack instead of 1
@@ -44,7 +43,7 @@ and Q =
 and F =
     | CheckSig of PubKey
     | CheckMultiSig of uint32 * PubKey []
-    | Time of uint32
+    | Time of LockTime
     | HashEqual of uint256
     | Threshold of (uint32 * E * W [])
     | And of (V * F)
@@ -57,7 +56,7 @@ and F =
 and V =
     | CheckSig of PubKey
     | CheckMultiSig of uint32 * PubKey []
-    | Time of uint32
+    | Time of LockTime
     | HashEqual of uint256
     | Threshold of (uint32 * E * W [])
     | And of (V * V)
@@ -68,7 +67,7 @@ and V =
 
 /// "T"opLevel representation. Must be satisfied, and leave zero (or non-zero) value onto the stack
 and T =
-    | Time of uint32
+    | Time of LockTime
     | HashEqual of uint256
     | And of (V * T)
     | ParallelOr of (E * W)
@@ -111,7 +110,7 @@ type E with
                 (pks 
                  |> Array.fold (fun acc k -> sprintf "%s,%s" acc (k.ToString())) 
                         "")
-        | Time t -> sprintf "E.time(%d)" t
+        | Time t -> sprintf "E.time(%s)" (t.ToString())
         | Threshold(num, e, ws) -> 
             sprintf "E.thres(%d,%s,%s)" num (e.print()) 
                 (ws 
@@ -135,7 +134,7 @@ type E with
             sb.AppendFormat(" {0} OP_CHECKMULTISIG", EncodeInt(pks.Length)) |> ignore
             sb
         | Time t -> 
-            sb.AppendFormat(" OP_DUP OP_IF {0} OP_CSV OP_DROP OP_ENDIF", (EncodeUint t))
+            sb.AppendFormat(" OP_DUP OP_IF {0} OP_CSV OP_DROP OP_ENDIF", EncodeUint(!> t))
         | Threshold(k, e, ws) -> 
             e.Serialize(sb) |> ignore
             for w in ws do
@@ -214,7 +213,7 @@ and W with
         match this with
         | CheckSig pk -> sprintf "W.pk(%s)" (pk.ToString())
         | HashEqual u -> sprintf "W.hash(%s)" (u.ToString())
-        | Time t -> sprintf "W.time(%d)" t
+        | Time t -> sprintf "W.time(%s)" (t.ToString())
         | CastE e -> e.print()
     
     member this.Serialize(sb : StringBuilder) : StringBuilder =
@@ -232,7 +231,7 @@ and W with
             sb.Append(" OP_EQUALVERIFY 1 OP_ENDIF")
         | Time t -> 
             sb.AppendFormat
-                (" OP_SWAP OP_DUP OP_IF {0} OP_CSV OP_DROP OP_ENDIF", (EncodeUint t))
+                (" OP_SWAP OP_DUP OP_IF {0} OP_CSV OP_DROP OP_ENDIF", (EncodeUint (!> t)))
         | CastE e -> 
             sb.Append(" OP_TOALTSTACK") |> ignore
             e.Serialize(sb) |> ignore
@@ -248,7 +247,7 @@ and F with
                 (pks 
                  |> Array.fold (fun acc k -> sprintf "%s,%s" acc (k.ToString())) 
                         "")
-        | Time t -> sprintf "F.time(%d)" t
+        | Time t -> sprintf "F.time(%s)" (t.ToString())
         | HashEqual h -> sprintf "F.hash(%s)" (h.ToString())
         | Threshold(num, e, ws) -> 
             sprintf "F.thres(%d,%s,%s)" num (e.print()) 
@@ -277,7 +276,7 @@ and F with
             for pk in pks do
                 sb.AppendFormat(" {0}", (pk.ToHex())) |> ignore
             sb.AppendFormat(" {0} OP_CHECKMULTISIGVERIFY 1", (EncodeInt pks.Length))
-        | Time t -> sb.AppendFormat(" {0} OP_CSV OP_0NOTEQUAL", (EncodeUint t))
+        | Time t -> sb.AppendFormat(" {0} OP_CSV OP_0NOTEQUAL", (EncodeUint (!> t)))
         | HashEqual h -> 
             sb.AppendFormat
                 (" OP_SIZE 20 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUALVERIFY 1", h)
@@ -324,7 +323,7 @@ and V with
                 (pks 
                  |> Array.fold (fun acc k -> sprintf "%s,%s" acc (k.ToString())) 
                         "")
-        | Time t -> sprintf "V.time(%d)" t
+        | Time t -> sprintf "V.time(%s)" (t.ToString())
         | HashEqual h -> sprintf "V.hash(%s)" (h.ToString())
         | Threshold(num, e, ws) -> 
             sprintf "V.thres(%d,%s,%s)" num (e.print()) 
@@ -345,7 +344,7 @@ and V with
             for pk in pks do
                 sb.AppendFormat(" {0}", (pk.ToHex())) |> ignore
             sb.AppendFormat(" {0} OP_CHECKMULTISIGVERIFY", (EncodeInt pks.Length))
-        | Time t -> sb.AppendFormat(" {0:x} OP_CSV OP_DROP", (EncodeUint t))
+        | Time t -> sb.AppendFormat(" {0} OP_CSV OP_DROP", (EncodeUint (!> t)))
         | HashEqual h -> 
             sb.AppendFormat
                 (" OP_SIZE 20 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUALVERIFY", h)
@@ -386,7 +385,7 @@ and T with
     
     member this.print() =
         match this with
-        | Time t -> sprintf "T.time(%d)" t
+        | Time t -> sprintf "T.time(%s)" (t.ToString())
         | HashEqual h -> sprintf "T.hash(%s)" (h.ToString())
         | And(l, r) -> sprintf "T.and_p(%s,%s)" (l.print()) (r.print())
         | ParallelOr(l, r) -> sprintf "T.or_vp(%s,%s)" (l.print()) (r.print())
@@ -399,7 +398,7 @@ and T with
     
     member this.Serialize(sb : StringBuilder) : StringBuilder =
         match this with
-        | Time t -> sb.AppendFormat(" {0} OP_CSV", (EncodeUint t))
+        | Time t -> sb.AppendFormat(" {0} OP_CSV", (EncodeUint (!> t)))
         | HashEqual h -> 
             sb.AppendFormat
                 (" OP_SIZE 20 OP_EQUALVERIFY OP_SHA256 {0} OP_EQUAL", h)

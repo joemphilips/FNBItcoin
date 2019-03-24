@@ -1,6 +1,7 @@
 module FNBitcoin.MiniScriptCompiler
 
 open NBitcoin
+open FNBitcoin.Utils
 open FNBitcoin.MiniScriptParser
 open FNBitcoin.MiniScript
 open MiniScriptAST
@@ -10,7 +11,7 @@ type CompiledNode =
     | Pk of NBitcoin.PubKey
     | Multi of uint32 * PubKey []
     | Hash of uint256
-    | Time of uint32
+    | Time of LockTime
     | Threshold of uint32 * CompiledNode []
     | And of left : CompiledNode * right : CompiledNode
     | Or of left : CompiledNode * right : CompiledNode * leftProb : float * rightProb : float
@@ -309,7 +310,7 @@ module CompiledNode =
               satCost = e.satCost
               dissatCost = 0.0 }
         | Time t -> 
-            let num_cost = scriptNumCost t
+            let num_cost = scriptNumCost (!> t)
             { ast = TTree(T.Time t)
               pkCost = 1u + uint32 num_cost
               satCost = 0.0
@@ -466,7 +467,7 @@ module CompiledNode =
                 |> List.toArray
                 |> Cost.fold_costs p_sat p_dissat
         | Time n -> 
-            let num_cost = scriptNumCost n
+            let num_cost = scriptNumCost (!> n)
             { ast = ETree(E.Time n)
               pkCost = 5u + num_cost
               satCost = 2.0
@@ -788,7 +789,7 @@ module CompiledNode =
               satCost = 72.0
               dissatCost = 1.0 }
         | Time t -> 
-            let num_cost = scriptNumCost t
+            let num_cost = scriptNumCost (!> t)
             { ast = WTree(W.Time(t))
               pkCost = 6u + num_cost
               satCost = 2.0
@@ -817,7 +818,7 @@ module CompiledNode =
               satCost = 1.0 + 72.0 * float m
               dissatCost = 0.0 }
         | Time t -> 
-            let num_cost = scriptNumCost t
+            let num_cost = scriptNumCost (!> t)
             { ast = FTree(F.Time(t))
               pkCost = 2u + num_cost
               satCost = 0.0
@@ -961,7 +962,7 @@ module CompiledNode =
               satCost = 1.0 + 72.0 * float m
               dissatCost = 0.0 }
         | Time t -> 
-            let num_cost = scriptNumCost t
+            let num_cost = scriptNumCost (!> t)
             { ast = VTree(V.Time(t))
               pkCost = 2u + num_cost
               satCost = 0.0

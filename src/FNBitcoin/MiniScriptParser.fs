@@ -8,7 +8,7 @@ type Policy =
     | Key of PubKey
     | Multi of uint32 * PubKey []
     | Hash of uint256
-    | Time of uint32
+    | Time of NBitcoin.LockTime
     | Threshold of uint32 * Policy []
     | And of Policy * Policy
     | Or of Policy * Policy
@@ -104,7 +104,7 @@ let rec (|Policy|_|) s =
     | Expression "multi" (SurroundedByBrackets(PubKeysPattern pks)) -> 
         Multi((fst pks), (snd pks)) |> Some
     | Expression "hash" (SurroundedByBrackets(Hash hash)) -> Some(Hash hash)
-    | Expression "time" (SurroundedByBrackets(Time t)) -> Some(Time(t))
+    | Expression "time" (SurroundedByBrackets(Time t)) -> Some(Time(LockTime(t)))
     // recursive matches
     | Expression "thres" (SurroundedByBrackets(Threshold thres)) -> 
         Some(Threshold(thres))
