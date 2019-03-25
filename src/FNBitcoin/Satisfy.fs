@@ -23,7 +23,7 @@ module Satisfy =
     type SatisfiedItem =
         | PreImage of byte[]
         | Signature of TransactionSignature
-        | OtherPush of byte[]
+        | RawPush of byte[]
 
     type SatisfactionResult = Result<SatisfiedItem list, FailureCase>
 
@@ -37,7 +37,7 @@ module Satisfy =
         | None -> Error (MissingSig [k])
         | Some(txSig) -> Ok([Signature(txSig)])
 
-    let satisfyCheckMultisig(m, pks, keyFn: SignatureProvider) =
+    let satisfyCheckMultisig (keyFn: SignatureProvider) (m, pks) =
         let maybeSigList = pks
                            |> Array.map(keyFn)
                            |> Array.toList
@@ -53,7 +53,10 @@ module Satisfy =
                                                     if maybeSig.IsNone then Some(pk) else None)
             Error(MissingSig(sigNotFoundPks))
 
-    let satisfyCSV(t: LockTime, age: LockTime) =
+    let satisfyHashEqual (hashFn: PreImageProvider) h =
+        failwith ""
+
+    let satisfyCSV (age: LockTime) (t: LockTime) =
         let offset = t.Value - age.Value
         if
             (age.IsHeightLock && t.IsHeightLock)
@@ -72,7 +75,7 @@ module Satisfy =
         else
             Error(LockTimeTypeMismatch)
 
-    let rec satisfyThreshold(k, e, ws: W[], keyFn, hashFn, age): SatisfactionResult =
+    let rec satisfyThreshold (keyFn, hashFn, age) (k, e, ws): SatisfactionResult =
         let flatten l = List.collect id l
         let wsList = ws |> Array.toList
 
@@ -157,21 +160,22 @@ module Satisfy =
     and satisfySwitchOr providers (l, r) =
         match (satisfyAST providers l), (satisfyAST providers r) with
         | Error e, Error _ -> Error e
-        | Ok lItems, Error _ -> Ok(lItems @ [OtherPush([|byte 1|])])
-        | Error e, Ok rItems -> Ok(rItems @ [OtherPush([|byte 0|])])
+        | Ok lItems, Error _ -> Ok(lItems @ [RawPush([|byte 1|])])
+        | Error e, Ok rItems -> Ok(rItems @ [RawPush([|byte 0|])])
         | Ok lItems, Ok rItems -> // return the one has less cost
             if satisfyCost(lItems) + 2 <= satisfyCost rItems + 1 then
-                Ok(lItems @ [OtherPush([|byte 1|])])
+                Ok(lItems @ [RawPush([|byte 1|])])
             else
-                Ok(rItems @ [OtherPush([|byte 0|])])
+                Ok(rItems @ [RawPush([|byte 0|])])
 
-    and satisfyE(keyFn, hashFn, age) (e: E) =
+    and satisfyE providers (e: E) =
+        let (keyFn, hashFn, age) = providers
         match e with
         | E.CheckSig k -> satisfyCheckSig keyFn k
-        | E.CheckMultiSig(m, pks) -> satisfyCheckMultisig(m, pks, keyFn)
-        | E.Time t ->  satisfyCSV(t, age)
-        | E.Threshold (k, sube, subw) ->
-            satisfyThreshold(k, sube, subw, keyFn, hashFn, age)
+        | E.CheckMultiSig(m, pks) -> satisfyCheckMultisig keyFn (m, pks)
+        | E.Time t ->  satisfyCSV age t
+        | E.Threshold i ->
+            satisfyThreshold providers i
         | E.ParallelAnd(e, w) ->
             satisfyE (keyFn, hashFn, age) e
                 >>= (fun eitem -> satisfyW(keyFn, hashFn, age) w >>= (fun witem -> Ok(eitem @ witem)))
@@ -183,39 +187,108 @@ module Satisfy =
         | E.SwitchOrLeft(e, f) -> satisfySwitchOr (keyFn, hashFn, age) (ETree(e), FTree(f))
         | E.SwitchOrRight(e, f) -> satisfySwitchOr (keyFn, hashFn, age) (ETree(e), FTree(f))
         | E.Likely f ->
-            satisfyF (keyFn, hashFn, age) f |> Result.map(fun items -> items @ [OtherPush([||])])
+            satisfyF (keyFn, hashFn, age) f |> Result.map(fun items -> items @ [RawPush([||])])
         | E.Unlikely f ->
-            satisfyF (keyFn, hashFn, age) f |> Result.map(fun items -> items @ [OtherPush([|byte 1|])])
+            satisfyF (keyFn, hashFn, age) f |> Result.map(fun items -> items @ [RawPush([|byte 1|])])
 
-    and satisfyW(keyFn, hashFn, age) w: SatisfactionResult =
+    and satisfyW providers w: SatisfactionResult =
+        let keyFn, hashFn, age = providers
         match w with
-        | _ -> failwith ""
+        | W.CheckSig pk -> satisfyCheckSig keyFn pk
+        | W.HashEqual h -> satisfyHashEqual hashFn h
+        | W.Time t -> satisfyCSV age t |> Result.map(fun items -> items @ [RawPush([| byte 1 |])])
+        | W.CastE e  -> satisfyE providers e
 
-    and satisfyT(keyFn, hashFn, age) t =
+    and satisfyT providers t =
+        let (keyFn, hashFn, age) = providers
         match t with
-        | _ -> failwith ""
+        | T.Time t -> Ok([RawPush([||])])
+        | T.HashEqual h -> satisfyHashEqual hashFn h
+        | T.And(v, t) ->
+            let rRes = satisfyT providers t
+            let lRes = satisfyV providers v
+            rRes >>= (fun rItems -> lRes >>= fun(lItems) -> Ok(rItems @ lItems))
+        | T.ParallelOr(e, w) -> satisfyParallelOr providers (ETree(e), WTree(w))
+        | T.CascadeOr(e, t) -> satisfyCascadeOr providers (ETree(e), TTree(t))
+        | T.CascadeOrV(e, v) -> satisfyCascadeOr providers (ETree(e), VTree(v))
+        | T.SwitchOr(t1, t2) -> satisfySwitchOr providers (TTree(t1), TTree(t2))
+        | T.SwitchOrV(v1, v2) -> satisfySwitchOr providers (VTree(v1), VTree(v2))
+        | T.DelayedOr(q1, q2) -> satisfySwitchOr providers (QTree(q1), QTree(q2))
+        | T.CastE e -> satisfyE providers e
 
-    and satisfyQ(keyFn, hashFn, age) q =
+    and satisfyQ providers q =
+        let keyFn, hashFn, age = providers
         match q with
-        | _ -> failwith ""
+        | Q.Pubkey pk -> satisfyCheckSig (keyFn) pk
+        | Q.And(l, r) ->
+            let rRes = satisfyQ providers r
+            let lRes = satisfyV providers l
+            rRes >>= (fun rItems -> lRes >>= fun(lItems) -> Ok(rItems @ lItems))
+        | Q.Or(l, r) -> satisfySwitchOr providers (QTree(l), QTree(r))
 
-    and satisfyF(keyFn, hashFn, age) f =
+    and satisfyF providers f =
+        let (keyFn, hashFn, age) = providers
         match f with
-        | _ -> failwith ""
+        | F.CheckSig pk -> satisfyCheckSig keyFn pk
+        | F.CheckMultiSig(m, pks) -> satisfyCheckMultisig keyFn (m, pks)
+        | F.Time t -> satisfyCSV age t
+        | F.HashEqual h -> satisfyHashEqual hashFn h
+        | F.Threshold i -> satisfyThreshold providers i
+        | F.And(v ,f) ->
+            let rRes = satisfyF providers f
+            let lRes = satisfyV providers v
+            rRes >>= (fun rItems -> lRes >>= fun(lItems) -> Ok(rItems @ lItems))
+        | F.CascadeOr(e, v) -> satisfyCascadeOr providers (ETree(e), VTree(v))
+        | F.SwitchOr(f1, f2) -> satisfySwitchOr providers (FTree(f1), FTree(f2))
+        | F.SwitchOrV(v1, v2) -> satisfySwitchOr providers (VTree(v1), VTree(v2))
+        | F.DelayedOr(q1, q2) -> satisfySwitchOr providers (QTree(q1), QTree(q2))
 
-    and satisfyV(keyFn, hashFn, age) v =
+    and satisfyV providers v =
+        let (keyFn, hashFn, age) = providers
         match v with
-        | _ -> failwith ""
+        | V.CheckSig pk -> satisfyCheckSig keyFn pk
+        | V.CheckMultiSig (m, pks) -> satisfyCheckMultisig keyFn (m, pks)
+        | V.Time t -> satisfyCSV age t
+        | V.HashEqual h -> satisfyHashEqual hashFn h
+        | V.Threshold i -> satisfyThreshold providers i
+        | V.And(v1, v2) ->
+            let rRes = satisfyV providers v2
+            let lRes = satisfyV providers v1
+            rRes >>= (fun rItems -> lRes >>= fun(lItems) -> Ok(rItems @ lItems))
+        | V.SwitchOr (v1, v2) -> satisfySwitchOr providers (VTree(v1), VTree(v2))
+        | V.SwitchOrT (t1, t2) -> satisfySwitchOr providers (TTree(t1), TTree(t2))
+        | V.CascadeOr(e, v) -> satisfyCascadeOr providers (ETree(e), VTree(v))
+        | V.DelayedOr(q1, q2) -> satisfySwitchOr providers (QTree(q1), QTree(q2))
 
     and dissatisfyE (e: E): SatisfiedItem list =
         match e with
-        | _ -> failwith "not impl"
+        | E.CheckSig pk -> [RawPush([| byte 0 |])]
+        | E.CheckMultiSig (m, pks) -> [RawPush[| byte 0 |]; RawPush[| byte(m + 1u)|]]
+        | E.Time t -> [RawPush([| byte 0 |])]
+        | E.Threshold (_, e, ws) ->
+            let wDissat = ws |> Array.toList |> List.rev |> List.map(dissatisfyW) |> List.collect id
+            let eDissat = dissatisfyE e
+            wDissat @ eDissat
+        | E.ParallelAnd (e, w) ->
+             (dissatisfyW w) @ (dissatisfyE e)
+        | E.CascadeAnd (e, _) ->
+             (dissatisfyE e)
+        | E.ParallelOr (e, w)  ->
+             (dissatisfyW w) @ (dissatisfyE e)
+        | E.CascadeOr (e, e2) ->
+             (dissatisfyE e2) @ (dissatisfyE e)
+        | E.SwitchOrLeft (e, _) ->
+             (dissatisfyE e) @ [RawPush[| byte 1 |]]
+        | E.SwitchOrRight (e, _) ->
+             (dissatisfyE e) @ [RawPush[||]]
+        | E.Likely f -> [RawPush[| byte 1 |]]
+        | E.Unlikely f -> [RawPush[||]]
 
     and dissatisfyW (w: W): SatisfiedItem list =
         match w with
-        | W.CheckSig _ -> []
-        | W.HashEqual _ -> []
-        | W.Time _ -> []
+        | W.CheckSig _ -> [RawPush[||]]
+        | W.HashEqual _ -> [RawPush[||]]
+        | W.Time _ -> [RawPush[||]]
         | W.CastE e -> dissatisfyE e
 
     // ---------- types -------
@@ -223,6 +296,8 @@ module Satisfy =
         member this.Satisfy(keyFn: SignatureProvider,
                             hashFn: PreImageProvider,
                             age: LockTime): SatisfactionResult = satisfyE(keyFn, hashFn, age) this
+
+        member this.Disatisfy(): SatisfiedItem list = dissatisfyE this
 
     type T with
         member this.Satisfy(keyFn: SignatureProvider,
@@ -232,6 +307,7 @@ module Satisfy =
         member this.Satisfy(keyFn: SignatureProvider,
                             hashFn: PreImageProvider,
                             age: LockTime): SatisfactionResult = satisfyW(keyFn, hashFn, age) this
+        member this.Disatisfy(): SatisfiedItem list = dissatisfyW this
     type Q with
         member this.Satisfy(keyFn: SignatureProvider,
                             hashFn: PreImageProvider,
